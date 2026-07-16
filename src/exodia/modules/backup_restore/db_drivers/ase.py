@@ -62,7 +62,18 @@ class AseRestoreDriver(DBRestoreDriver):
         # from stdin at the "Password:" prompt in interactive contexts; in this
         # secret-free argv we rely on the ASE user store / -X SSO or an
         # externally-supplied auth, never -P <cleartext>.
-        return ["isql", "-S", self._server(ctx), "-U", self._user(ctx), "-b", "-w", "1000", "-Q", sql]
+        return [
+            "isql",
+            "-S",
+            self._server(ctx),
+            "-U",
+            self._user(ctx),
+            "-b",
+            "-w",
+            "1000",
+            "-Q",
+            sql,
+        ]
 
     # --- Strategy interface ---------------------------------------------------
 
@@ -96,9 +107,7 @@ class AseRestoreDriver(DBRestoreDriver):
         if not database:
             return Result.fail(name, "no target database given (set --target or params.database)")
         if not self._data_dump(ctx):
-            return Result.fail(
-                name, "no data dump given (set --source or params.data_dump)"
-            )
+            return Result.fail(name, "no data dump given (set --source or params.data_dump)")
         runner = ctx.runner()
         timeout = int(ctx.get("load_timeout", 3600))
         for cmd in self.plan(ctx):
@@ -125,9 +134,7 @@ class AseRestoreDriver(DBRestoreDriver):
         # nosec B608 - not user-facing SQL: `database` is a SAP DB identifier from
         # trusted migration config, and the statement is passed as a single argv
         # element to isql (never a shell). ASE DDL/status verbs cannot be bound.
-        sql = (
-            f"select name, status from master..sysdatabases where name = '{database}'"  # nosec B608
-        )
+        sql = f"select name, status from master..sysdatabases where name = '{database}'"  # nosec B608
         cr = runner.run(self._isql(ctx, sql), timeout=int(ctx.get("verify_timeout", 120)))
         if not cr.ok:
             return Result.fail(

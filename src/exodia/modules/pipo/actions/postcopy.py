@@ -114,14 +114,11 @@ class RebuildSecStoreAction(_PostCopyAction):
 
     def _tool(self, ctx: Context) -> str:
         return str(
-            ctx.get("secstore_tool")
-            or f"{instance_dir(ctx)}/j2ee/configtool/secure-store.sh"
+            ctx.get("secstore_tool") or f"{instance_dir(ctx)}/j2ee/configtool/secure-store.sh"
         )
 
     def _store_dir(self, ctx: Context) -> str:
-        return str(
-            ctx.get("secstore_dir") or f"{instance_dir(ctx)}/SDM/program/config"
-        )
+        return str(ctx.get("secstore_dir") or f"{instance_dir(ctx)}/SDM/program/config")
 
     def dry_run(self, ctx: Context) -> Result:
         phase = f"{self.name}.dry-run"
@@ -242,7 +239,9 @@ class RegisterSldAction(_PostCopyAction):
         phase = f"{self.name}.execute"
         host, port = self._endpoint(ctx)
         if not host:
-            return Result.fail(phase, "no sld_host configured — cannot register the SLD data supplier")
+            return Result.fail(
+                phase, "no sld_host configured — cannot register the SLD data supplier"
+            )
         tool = self._tool(ctx)
         user = str(ctx.get("sld_user", "SLDDSUSER"))
         # SLD password (if provided) goes over stdin only — never on argv.
@@ -330,7 +329,9 @@ class FixRfcJcoAction(_PostCopyAction):
         phase = f"{self.name}.execute"
         target_host = ctx.get("target_ashost")
         if not target_host:
-            return Result.fail(phase, "no target_ashost configured — cannot re-point JCo/RFC destinations")
+            return Result.fail(
+                phase, "no target_ashost configured — cannot re-point JCo/RFC destinations"
+            )
         tool = self._tool(ctx)
         config = str(ctx.get("jco_config_path", ""))
         argv = [tool, "-repoint", "-target-host", str(target_host)]
@@ -400,9 +401,7 @@ class ReconfigureUmeAction(_PostCopyAction):
     _UME_PROP = "ume.persistence.data_source_configuration"
 
     def _tool(self, ctx: Context) -> str:
-        return str(
-            ctx.get("configtool") or f"{instance_dir(ctx)}/j2ee/configtool/consoleconfig.sh"
-        )
+        return str(ctx.get("configtool") or f"{instance_dir(ctx)}/j2ee/configtool/consoleconfig.sh")
 
     def _datasource(self, ctx: Context) -> str:
         return str(ctx.get("ume_datasource", "dataSourceConfiguration_database_only.xml"))
@@ -417,7 +416,12 @@ class ReconfigureUmeAction(_PostCopyAction):
             phase,
             f"[{sid(ctx)}] would set UME datasource to '{datasource}' on schema {schema}",
             detail="  1. " + " ".join(argv_preview) + "  (DB password, if any, piped via stdin)",
-            data={"tool": tool, "schema": schema, "datasource": datasource, "command": argv_preview},
+            data={
+                "tool": tool,
+                "schema": schema,
+                "datasource": datasource,
+                "command": argv_preview,
+            },
         )
 
     def execute(self, ctx: Context) -> Result:

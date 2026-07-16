@@ -105,4 +105,3 @@
     - "Export the encryption root keys from the source and import them on the target"
     - "Root keys are system-specific and mandatory to recover an encrypted backup"
   sap_note: "2444090"
-

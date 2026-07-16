@@ -1,8 +1,8 @@
 """HANA configuration prerequisite checks (TIA-57 #4, #6, #8).
 
-  4. log_mode = normal in global.ini [persistence]
-  6. source vs target HANA version compatibility (target >= source)
-  8. backint configuration present when backint is the backup destination
+4. log_mode = normal in global.ini [persistence]
+6. source vs target HANA version compatibility (target >= source)
+8. backint configuration present when backint is the backup destination
 """
 
 from __future__ import annotations

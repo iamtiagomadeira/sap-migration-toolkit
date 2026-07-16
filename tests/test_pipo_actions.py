@@ -318,9 +318,7 @@ def test_rfc_dry_run_missing_target_fails() -> None:
 # --------------------------------------------------------------------------- #
 def test_ume_execute_and_verify() -> None:
     ds = "dataSourceConfiguration_database_only.xml"
-    runner = RecordingRunner(
-        by_arg={"-set": (0, "", ""), "-get": (0, f"value={ds}", "")}
-    )
+    runner = RecordingRunner(by_arg={"-set": (0, "", ""), "-get": (0, f"value={ds}", "")})
     ctx = _ctx(runner, sid="PIX", params={"ume_datasource": ds})
     ex = ReconfigureUmeAction().execute(ctx)
     assert ex.status is Status.PASS

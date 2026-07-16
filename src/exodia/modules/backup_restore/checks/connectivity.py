@@ -1,8 +1,8 @@
 """HANA connectivity & identity checks (TIA-57 #9, #10, #11).
 
-  9. SID and instance number sanity
- 10. hdbuserstore keys present (the user can actually connect)
- 11. HANA SQL ports reachable (3<nn>13 / 3<nn>15)
+ 9. SID and instance number sanity
+10. hdbuserstore keys present (the user can actually connect)
+11. HANA SQL ports reachable (3<nn>13 / 3<nn>15)
 """
 
 from __future__ import annotations
@@ -26,9 +26,7 @@ class SidInstanceSanityCheck(Check):
         if not c.is_valid_sid(the_sid):
             problems.append(f"invalid SID '{the_sid}' (expected 3 alphanumerics, letter first)")
         if not c.is_valid_instance(the_instance):
-            problems.append(
-                f"invalid instance number '{the_instance}' (expected two digits 00-99)"
-            )
+            problems.append(f"invalid instance number '{the_instance}' (expected two digits 00-99)")
         if problems:
             return Result.fail(
                 self.name,

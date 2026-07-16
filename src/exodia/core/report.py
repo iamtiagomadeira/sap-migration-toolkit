@@ -49,7 +49,9 @@ def render_table(results: list[Result], title: str, console: Console | None = No
             if r.cause:
                 body += f"[bold]Cause:[/] {r.cause}\n"
             if r.fix:
-                body += "[bold]Fix:[/]\n" + "\n".join(f"  {i + 1}. {s}" for i, s in enumerate(r.fix))
+                body += "[bold]Fix:[/]\n" + "\n".join(
+                    f"  {i + 1}. {s}" for i, s in enumerate(r.fix)
+                )
             if r.sap_note:
                 body += f"\n[bold]SAP Note:[/] {r.sap_note}"
             console.print(Panel(body, title=f"🔧 {r.name}", border_style="red"))

@@ -1,7 +1,7 @@
 """HANA target capacity checks (TIA-57 #5, #12).
 
-  5. free space on target >= source data size (reuses core.free-space df logic)
- 12. space for logs/traces on the target
+ 5. free space on target >= source data size (reuses core.free-space df logic)
+12. space for logs/traces on the target
 """
 
 from __future__ import annotations

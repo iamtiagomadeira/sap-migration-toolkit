@@ -36,8 +36,7 @@ class HanaJavaSchemaCheck(Check):
         # nosec B608 - `schema` is a SAP schema identifier (SAP<SID>DB) derived
         # from trusted config, passed as one argv element to hdbsql (no shell).
         sql = (
-            "SELECT COUNT(*) FROM SYS.SCHEMAS "
-            f"WHERE SCHEMA_NAME = '{schema}'"  # nosec B608
+            "SELECT COUNT(*) FROM SYS.SCHEMAS " f"WHERE SCHEMA_NAME = '{schema}'"  # nosec B608
         )
         argv = [
             "hdbsql",

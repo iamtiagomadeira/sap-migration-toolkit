@@ -35,7 +35,9 @@ class CommandResult:
 class Runner:
     """Runs commands locally. Never uses shell=True."""
 
-    def run(self, argv: list[str], timeout: int = 300, input_text: str | None = None) -> CommandResult:
+    def run(
+        self, argv: list[str], timeout: int = 300, input_text: str | None = None
+    ) -> CommandResult:
         if not isinstance(argv, list) or not all(isinstance(a, str) for a in argv):
             raise TypeError("argv must be a list[str] — no shell strings allowed")
         try:

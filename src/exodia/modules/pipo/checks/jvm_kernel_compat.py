@@ -14,7 +14,9 @@ import re
 from exodia.core import Check, Context, Result
 
 _KERNEL_REL = re.compile(r"kernel release\s+(\d+)", re.IGNORECASE)
-_KERNEL_PATCH = re.compile(r"(?:patch number|sup\.?\s*pkg|kernel patch number)\s+(\d+)", re.IGNORECASE)
+_KERNEL_PATCH = re.compile(
+    r"(?:patch number|sup\.?\s*pkg|kernel patch number)\s+(\d+)", re.IGNORECASE
+)
 _JVM_VER = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 
 

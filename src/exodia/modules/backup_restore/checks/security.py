@@ -1,7 +1,7 @@
 """HANA backup security / filesystem checks (TIA-57 #7, #13).
 
-  7. encryption root keys available IF the backup is encrypted
- 13. sidadm permissions on the backup paths
+ 7. encryption root keys available IF the backup is encrypted
+13. sidadm permissions on the backup paths
 """
 
 from __future__ import annotations
@@ -26,9 +26,7 @@ class EncryptionKeysCheck(Check):
                 "backup is not encrypted — no root keys required",
                 data={"encrypted": False},
             )
-        stmt = (
-            "SELECT ROOT_KEY_TYPE_NAME, HAS_BACKUP FROM SYS.M_ENCRYPTION_OVERVIEW"
-        )
+        stmt = "SELECT ROOT_KEY_TYPE_NAME, HAS_BACKUP FROM SYS.M_ENCRYPTION_OVERVIEW"
         cr = c.run(ctx, c.hdbsql_argv(ctx, stmt))
         if not cr.ok:
             return Result.fail(

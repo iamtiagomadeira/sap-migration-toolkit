@@ -292,9 +292,7 @@ def test_execute_builds_env_argv_and_launches_detached(tmp_path: Path) -> None:
 def test_execute_waiting_for_input_warns_with_gui_url(tmp_path: Path) -> None:
     runner = FakeRunner(exit_code=0, stdout="INFO: waiting for input")
     path = _write_inifile(tmp_path)
-    ctx = _ctx(
-        runner, params={"inifile": path, "product_id": "PID"}, host="sapci", assume_yes=True
-    )
+    ctx = _ctx(runner, params={"inifile": path, "product_id": "PID"}, host="sapci", assume_yes=True)
     result = SwpmSystemCopyAction().execute(ctx)
     assert result.status is Status.WARN
     assert result.data["state"] == RunState.WAITING_FOR_INPUT.value

@@ -29,9 +29,7 @@ def run_action(action: Action, prechecks: list[Check], ctx: Context) -> list[Res
     """Run pre-checks, then the guarded action flow. Aborts if a precheck blocks."""
     results = run_checks(prechecks, ctx)
     if any(r.status.is_blocking for r in results):
-        results.append(
-            Result.skip(f"{action.name}.execute", "aborted — pre-checks did not pass")
-        )
+        results.append(Result.skip(f"{action.name}.execute", "aborted — pre-checks did not pass"))
         return results
     results.extend(action.run_guarded(ctx))
     return results

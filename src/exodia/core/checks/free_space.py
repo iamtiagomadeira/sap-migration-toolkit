@@ -22,9 +22,7 @@ class FreeSpaceCheck(Check):
         runner = ctx.runner()
         cr = runner.run(["df", "-BG", "--output=avail", path])
         if not cr.ok:
-            return Result.fail(
-                self.name, f"could not read free space for {path}", detail=cr.stderr
-            )
+            return Result.fail(self.name, f"could not read free space for {path}", detail=cr.stderr)
         lines = [ln.strip() for ln in cr.stdout.splitlines() if ln.strip()]
         if len(lines) < 2:
             return Result.fail(self.name, f"unexpected df output for {path}", detail=cr.stdout)

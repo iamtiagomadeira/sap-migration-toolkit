@@ -87,8 +87,17 @@ def test_logger_redacts_secret_values(raw: str) -> None:
     out = _redact(raw)
     # The secret value must be gone; a redaction marker must be present.
     assert "***" in out
-    for leaked in ("hunter2", "swordfish", "Abc123", "topsecret", "ghp_deadbeef",
-                   "sk-12345", "Cleartext123", "mypassword", "superSecret"):
+    for leaked in (
+        "hunter2",
+        "swordfish",
+        "Abc123",
+        "topsecret",
+        "ghp_deadbeef",
+        "sk-12345",
+        "Cleartext123",
+        "mypassword",
+        "superSecret",
+    ):
         assert leaked not in out
 
 

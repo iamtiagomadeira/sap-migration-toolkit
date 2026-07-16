@@ -35,9 +35,7 @@ _SECRET_KEYS = {
 
 # Matches a value that looks like a secret being passed on a command line, e.g.
 # "-key_phrase Abc123" or "password=Abc123". Used to scrub captured output.
-_SECRET_INLINE = re.compile(
-    r"(?i)\b(key[_-]?phrase|password|passwd|pwd|secret)\b\s*[=: ]\s*\S+"
-)
+_SECRET_INLINE = re.compile(r"(?i)\b(key[_-]?phrase|password|passwd|pwd|secret)\b\s*[=: ]\s*\S+")
 
 
 def instance_nr(ctx: Context) -> str:

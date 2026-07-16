@@ -81,9 +81,7 @@ def test_drivers_declare_db_type() -> None:
 
 def test_hana_plan_builds_recover_command_no_side_effects() -> None:
     runner = FakeRunner()
-    ctx = _ctx_with_runner(
-        runner, db_type="hana", source="/backup/DATA", target="TENANT01"
-    )
+    ctx = _ctx_with_runner(runner, db_type="hana", source="/backup/DATA", target="TENANT01")
     plan = get_driver("hana").plan(ctx)
     # planning must not run anything
     assert runner.calls == []
@@ -99,9 +97,7 @@ def test_hana_plan_builds_recover_command_no_side_effects() -> None:
 
 def test_hana_restore_runs_recover() -> None:
     runner = FakeRunner(exit_code=0, stdout="0 rows affected")
-    ctx = _ctx_with_runner(
-        runner, db_type="hana", source="/backup/DATA", target="TENANT01"
-    )
+    ctx = _ctx_with_runner(runner, db_type="hana", source="/backup/DATA", target="TENANT01")
     result = get_driver("hana").restore(ctx)
     assert result.status is Status.PASS
     assert len(runner.calls) == 1

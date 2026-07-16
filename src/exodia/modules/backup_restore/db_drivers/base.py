@@ -91,9 +91,7 @@ def get_driver(db_type: str | None) -> DBRestoreDriver:
     """
     key = (db_type or "").strip().lower()
     if not key:
-        raise ValueError(
-            "db_type is required (e.g. 'hana' or 'ase'); pass --db-type on the CLI"
-        )
+        raise ValueError("db_type is required (e.g. 'hana' or 'ase'); pass --db-type on the CLI")
     cls = _DRIVERS.get(key)
     if cls is None:
         supported = ", ".join(sorted(_DRIVERS)) or "(none registered)"
