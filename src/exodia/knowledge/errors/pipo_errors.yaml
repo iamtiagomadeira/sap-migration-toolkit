@@ -1,0 +1,50 @@
+# Java PI/PO (NetWeaver AS Java) system-copy post-processing known errors.
+# IP rule: reference SAP Note NUMBERS + generic public-knowledge fixes only.
+# Never reproduce SAP Note text (copyright SAP, behind login).
+
+- pattern: "secure store|SecStore|key phrase.*(wrong|invalid|incorrect)|could not decrypt.*secure store"
+  cause: "Secure store (SECSTORE) key phrase does not match the restored data file on the target"
+  fix:
+    - "Re-run the secure store configuration on the target with the correct key phrase (NWA / configtool / SWPM system-copy step)"
+    - "Confirm SecStore.properties and SecStore.key were restored consistently as a pair"
+    - "Never store or log the key phrase; obtain it from the source's secure keystore custodian"
+  sap_note: "1642148"
+
+- pattern: "SLD.*not.*reachable|data supplier.*fail|SLD registration failed|CIM_ERR"
+  cause: "SLD data supplier still points at the source landscape after the Java system copy"
+  fix:
+    - "Re-point the SLD data supplier to the target SLD host/port (NWA -> SLD Data Supplier Configuration)"
+    - "Verify the SLD HTTP(S) endpoint answers before triggering the data supplier"
+    - "Re-register the technical system in the target SLD"
+  sap_note: "2230669"
+
+- pattern: "UME|datasource.*(fail|not found)|com.sap.security.core|user management engine"
+  cause: "UME datasource (DB or LDAP) misconfigured after the Java system copy"
+  fix:
+    - "Verify the UME data source in the configtool matches the target DB schema"
+    - "For LDAP-backed UME, re-point the LDAP connection to the target-side directory"
+    - "Restart the AS Java after correcting the UME configuration"
+  sap_note: "718383"
+
+- pattern: "JCo|RfcException|destination.*(not found|unavailable)|JCO_ERROR|connection refused.*33"
+  cause: "JCo RFC destinations still target the source ABAP/back-end systems after the copy"
+  fix:
+    - "Review and re-point all JCo RFC destinations (NWA -> JCo RFC Provider / Destinations)"
+    - "Update program IDs and gateway host/service for registered server destinations"
+    - "Re-test each destination before releasing PI/PO channels"
+  sap_note: "1043195"
+
+- pattern: "ICM.*port.*(in use|bind)|IcmAddService|address already in use.*5[0-9]{2}0[01]"
+  cause: "ICM HTTP/HTTPS port already bound by a stale or conflicting process on the target"
+  fix:
+    - "Identify and stop the process holding the 5NN00/5NN01 port before starting the ICM"
+    - "Confirm the instance number in the target profile matches the intended port range"
+  sap_note: "2007212"
+
+- pattern: "SAP<SID>DB|schema.*(not found|does not exist)|invalid schema name.*SAP.*DB"
+  cause: "AS Java HANA schema SAP<SID>DB missing or inaccessible in the target tenant after restore"
+  fix:
+    - "Confirm the backup/restore recovered the SAP<SID>DB schema into the correct target tenant"
+    - "Verify the SAP<SID>DB technical user exists and has privileges on the schema"
+    - "Re-run the target DB layer configuration if the schema name changed with the SID"
+  sap_note: "2101244"
