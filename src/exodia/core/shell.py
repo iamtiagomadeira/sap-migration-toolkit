@@ -97,13 +97,20 @@ class SSHRunner:
         )
         self._client = client
 
-    def run(self, argv: list[str], timeout: int = 300) -> CommandResult:
+    def run(
+        self, argv: list[str], timeout: int = 300, input_text: str | None = None
+    ) -> CommandResult:
         if self._client is None:
             self.connect()
         assert self._client is not None
         # Build a properly-quoted remote command line from the arg list.
         cmd = " ".join(shlex.quote(a) for a in argv)
-        _stdin, stdout, stderr = self._client.exec_command(cmd, timeout=timeout)
+        stdin, stdout, stderr = self._client.exec_command(cmd, timeout=timeout)
+        # Feed a secret (e.g. a secure-store key phrase) over stdin so it never
+        # appears on the remote command line — mirrors the local Runner contract.
+        if input_text is not None:
+            stdin.write(input_text)
+            stdin.channel.shutdown_write()
         exit_code = stdout.channel.recv_exit_status()
         return CommandResult(argv, exit_code, stdout.read().decode(), stderr.read().decode())
 

@@ -48,3 +48,36 @@
     - "Verify the SAP<SID>DB technical user exists and has privileges on the schema"
     - "Re-run the target DB layer configuration if the schema name changed with the SID"
   sap_note: "2101244"
+
+# --- Post-copy ACTION failure patterns (TIA-65) -----------------------------
+- pattern: "secure store re-key failed|did not open.*key phrase|key phrase does not match"
+  cause: "Secure store re-key/verify failed — the supplied key phrase does not decrypt the restored store"
+  fix:
+    - "Obtain the correct key phrase from the source secure-store custodian (never log or store it)"
+    - "Confirm SecStore.properties and SecStore.key were restored consistently as a pair on the target"
+    - "Re-run the secure-store tool feeding the key phrase over stdin, never on the command line"
+  sap_note: "1642148"
+
+- pattern: "SLD data supplier registration failed|SLD status does not reflect|sldreg.*fail"
+  cause: "SLD data-supplier re-registration did not apply the target SLD host/port"
+  fix:
+    - "Verify the target SLD HTTP(S) endpoint answers before re-running sldreg"
+    - "Re-point the SLD data supplier to the target SLD host/port and re-check the status"
+    - "Confirm the SLD data-supplier user exists on the target SLD"
+  sap_note: "2230669"
+
+- pattern: "JCo/RFC destination re-pointing failed|still references the source host|destination.*source"
+  cause: "JCo/RFC destinations were not fully re-pointed away from the source landscape"
+  fix:
+    - "Re-point every JCo/RFC destination to the target ABAP/back-end host and gateway"
+    - "Update registered-server program IDs and gateway host/service for the target"
+    - "Re-test each destination before releasing PI/PO channels"
+  sap_note: "1043195"
+
+- pattern: "UME datasource reconfiguration failed|UME datasource does not reflect|data_source_configuration"
+  cause: "UME datasource reconfiguration did not point at the target HANA schema/datasource"
+  fix:
+    - "Set ume.persistence.data_source_configuration to the target datasource with the offline config tool"
+    - "Confirm the target SAP<SID>DB schema and technical user are reachable from AS Java"
+    - "Restart AS Java after correcting the UME datasource configuration"
+  sap_note: "718383"
