@@ -7,11 +7,14 @@ optional config file, passed down, and discarded. No persistence, no memory.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
 from .shell import Runner, SSHRunner
+
+if TYPE_CHECKING:
+    from .config import ExodiaConfig
 
 
 class Context(BaseModel):
@@ -66,9 +69,39 @@ class Context(BaseModel):
         return self.params.get(key, default)
 
     @classmethod
-    def from_file(cls, path: str | Path) -> Context:
-        """Load a context from a YAML config file (the escape hatch)."""
-        import yaml
+    def from_config(cls, config: ExodiaConfig) -> Context:
+        """Build a Context from a validated :class:`ExodiaConfig`.
 
-        data = yaml.safe_load(Path(path).read_text()) or {}
-        return cls(**data)
+        Typed fields map onto the Context's own attributes; everything else
+        (escape-hatch extras, custom SQL, ...) is flattened into ``params`` so
+        it stays reachable through the unchanged ``ctx.get(...)`` escape hatch.
+        """
+        return cls(
+            host=config.host,
+            user=config.user,
+            port=config.port,
+            key_filename=config.key_filename,
+            known_hosts=config.known_hosts,
+            db_type=config.db_type,
+            sid=config.sid,
+            source=config.source,
+            target=config.target,
+            system_type=config.system_type,
+            dry_run=config.dry_run,
+            assume_yes=config.assume_yes,
+            skip_checks=list(config.escape_hatch.skip_checks),
+            pre_hooks=list(config.escape_hatch.pre_hooks),
+            post_hooks=list(config.escape_hatch.post_hooks),
+            params=config.as_params(),
+        )
+
+    @classmethod
+    def from_file(cls, path: str | Path) -> Context:
+        """Load a Context from a validated ``exodia.yaml`` / ``exodia.toml`` file.
+
+        Delegates to :class:`ExodiaConfig` so the file is schema-validated and any
+        problem surfaces as a friendly ``ConfigError`` instead of a raw traceback.
+        """
+        from .config import ExodiaConfig
+
+        return cls.from_config(ExodiaConfig.from_file(path))

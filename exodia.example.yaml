@@ -1,0 +1,84 @@
+# exodia.example.yaml — a fully-documented Exodia configuration file.
+#
+# Copy this to `exodia.yaml`, keep only the fields you need, and pass it with:
+#
+#     exodia run <operation> --config exodia.yaml
+#
+# CLI flags (--host, --user, --db-type, --source, --target, --execute, --yes)
+# override the values set here when provided.
+#
+# All fields are OPTIONAL. Typed fields below are validated on load; anything
+# not modelled here goes under `escape_hatch.extra_params` and stays reachable
+# from checks/actions via ctx.get("<key>").
+#
+# TOML (exodia.toml) is also supported with the same field names.
+
+# --------------------------------------------------------------------------- #
+# Target selection — where the operation runs.
+# --------------------------------------------------------------------------- #
+
+# Remote host to operate on. Omit (or null) to run locally.
+host: null
+# SSH user for the remote host. Required when `host` is set.
+user: null
+# SSH port (default 22).
+port: 22
+# Path to the SSH private key. Omit to use the agent / default key.
+key_filename: null
+# Path to a known_hosts file for host-key verification.
+known_hosts: null
+
+# --------------------------------------------------------------------------- #
+# SAP / DB parameters — the common migration inputs.
+# --------------------------------------------------------------------------- #
+
+# Database engine. Must be one of: hana | ase.
+db_type: hana
+# SAP System ID (3 chars, e.g. "PRD").
+sid: PRD
+# Source system / backup identifier (meaning depends on the operation).
+source: PRD
+# Target system / database identifier.
+target: QAS
+# System stack type: abap | java | pipo | ...
+system_type: java
+# SAP instance number, e.g. "00".
+instance_number: "00"
+# Path to a SWPM inifile.params for system-copy actions.
+inifile: /software/SWPM/inifile.params
+# SWPM product id for the chosen scenario.
+product_id: NW_ABAP_OneHost:GENERIC.IND.PD
+
+# Actions default to dry-run (nothing executes). Set false to allow execute.
+# Equivalent to passing --execute on the CLI.
+dry_run: true
+# Skip the confirmation prompt for actions. Equivalent to --yes on the CLI.
+assume_yes: false
+
+# --------------------------------------------------------------------------- #
+# escape_hatch — the deliberate 20% override block.
+# Everything here is optional and free-form.
+# --------------------------------------------------------------------------- #
+escape_hatch:
+  # Raw SQL to run instead of the generated recovery statement.
+  custom_recover_sql: null
+
+  # Commands (argv-safe) or documented step ids to run BEFORE the operation.
+  pre_hooks: []
+  #  - "df -h /hana/data"
+
+  # ...and AFTER the operation.
+  post_hooks: []
+  #  - "systemctl status sapinit"
+
+  # Dotted names of checks to skip for this run.
+  skip_checks: []
+  #  - "hana.free-space"
+
+  # Arbitrary extra parameters, reachable via ctx.get("<key>").
+  # This is where module-specific inputs live (see docs for each module).
+  extra_params: {}
+  #  userstore_key: SYSTEMDB
+  #  data_backup_prefix: COMPLETE_DATA_BACKUP
+  #  recover_until: "2026-07-16 10:00:00"
+  #  headroom_pct: 20

@@ -8,6 +8,7 @@ from rich.table import Table
 
 from . import __version__
 from .core import report
+from .core.config import ConfigError
 from .core.context import Context
 from .core.logging import configure
 from .core.registry import registry
@@ -75,7 +76,11 @@ def _build_context(
     config: str | None,
 ) -> Context:
     if config:
-        ctx = Context.from_file(config)
+        try:
+            ctx = Context.from_file(config)
+        except ConfigError as exc:
+            console.print(f"[red]Config error:[/]\n{exc}")
+            raise typer.Exit(2) from exc
         # CLI flags override file values when provided.
         if host:
             ctx.host = host
