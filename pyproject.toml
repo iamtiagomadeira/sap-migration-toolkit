@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Tiago Madeira", email = "tiago.filipe.madeira@gmail.com" }]
-keywords = ["sap", "hana", "migration", "basis", "automation", "swpm", "cli"]
+keywords = ["sap", "hana", "migration", "basis", "automation", "swpm", "pipo", "cli"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
@@ -38,6 +38,8 @@ exodia = "exodia.cli:app"
 [project.urls]
 Homepage = "https://github.com/iamtiagomadeira/exodia"
 Repository = "https://github.com/iamtiagomadeira/exodia"
+Documentation = "https://github.com/iamtiagomadeira/exodia#readme"
+Issues = "https://github.com/iamtiagomadeira/exodia/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/exodia"]
@@ -59,8 +61,18 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra -q"
+addopts = "-ra -q --cov=exodia --cov-report=term-missing --cov-fail-under=78"
 
 [tool.coverage.run]
 source = ["src/exodia"]
 branch = true
+
+[tool.coverage.report]
+# Honest gate: measured coverage is ~81%; the fail-under floor (78%) sits a few
+# points below to absorb minor churn without breaking the build on noise.
+exclude_lines = [
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+  "if __name__ == .__main__.:",
+]

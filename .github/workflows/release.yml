@@ -1,0 +1,75 @@
+name: Release
+
+# Publishes Exodia to PyPI on every version tag (e.g. `v0.1.0`).
+#
+# Authentication uses PyPI Trusted Publishing (OIDC) — NO API tokens are stored
+# in the repo. Before the first release, Tiago must configure the Trusted
+# Publisher on PyPI:
+#
+#   1. Go to https://pypi.org/manage/account/publishing/ (or the project's
+#      "Publishing" settings once the project exists).
+#   2. Add a new "pending publisher" / trusted publisher with:
+#        - PyPI Project Name: exodia
+#        - Owner:            iamtiagomadeira
+#        - Repository name:  exodia
+#        - Workflow name:    release.yml
+#        - Environment name: pypi   (matches the `environment:` below)
+#   3. Save. From then on this workflow can publish without any secret.
+#
+# Docs: https://docs.pypi.org/trusted-publishers/
+#
+# To cut a release:
+#   git tag v0.1.0 && git push origin v0.1.0
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build sdist + wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+      - name: Build distributions
+        run: python -m build
+      - name: Check distributions
+        run: twine check dist/*
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI (Trusted Publishing / OIDC)
+    needs: build
+    runs-on: ubuntu-latest
+    # The `pypi` environment must match the Trusted Publisher config on PyPI.
+    environment:
+      name: pypi
+      url: https://pypi.org/p/exodia
+    permissions:
+      # Mandatory for OIDC-based Trusted Publishing. No PyPI token needed.
+      id-token: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # No `password:` — authentication is via OIDC Trusted Publishing.

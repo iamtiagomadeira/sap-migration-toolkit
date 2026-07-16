@@ -32,12 +32,22 @@ automation while keeping the human in control for the decisions that matter.
 - **Defaults + escape hatch** — sensible opinionated defaults for the 80% standard
   path, plus config/hooks to override anything for the 20% special cases.
 
-## Install
+## Installation
 
 ```bash
-pip install exodia            # once published to PyPI
-# or, from source:
-pip install -e ".[tui]"
+# Recommended (isolated CLI install, once published to PyPI):
+pipx install exodia
+
+# Or with pip:
+pip install exodia
+
+# With the optional TUI:
+pip install "exodia[tui]"
+
+# From source (development):
+git clone https://github.com/iamtiagomadeira/exodia.git
+cd exodia
+pip install -e ".[dev,tui]"
 ```
 
 ## Usage
@@ -67,6 +77,39 @@ roadmap.
 | Tenant Copy | HANA | TLS/SSL, SYSTEMDB cert handling |
 | HANA System Replication | HANA | create / finalize / enable replica |
 | PI/PO Java system copy | HANA | SLD, SECSTORE, RFC, UME post-copy |
+
+## Contributing
+
+Install the pre-commit hooks once after cloning — they run ruff (lint + format),
+mypy, and a handful of fast file checks on every commit:
+
+```bash
+pip install pre-commit          # or: pipx install pre-commit
+pre-commit install
+pre-commit run --all-files      # run against the whole tree on demand
+```
+
+Tests carry a coverage floor (`--cov-fail-under=78`, enforced in CI and locally):
+
+```bash
+pytest                          # runs with coverage gate from pyproject.toml
+ruff check src/ tests/
+mypy src/exodia
+```
+
+## Release
+
+Releases are cut by pushing a version tag. CI builds the sdist + wheel, runs
+`twine check`, and publishes to PyPI via
+[Trusted Publishing](https://docs.pypi.org/trusted-publishers/) (OIDC — no API
+tokens stored in the repo). See `.github/workflows/release.yml` for the one-time
+PyPI Trusted Publisher setup Tiago must complete before the first release.
+
+```bash
+# bump the version in pyproject.toml, commit, then:
+git tag v0.1.0
+git push origin v0.1.0          # triggers build + publish
+```
 
 ## License
 
