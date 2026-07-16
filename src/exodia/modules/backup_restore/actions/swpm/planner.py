@@ -43,8 +43,9 @@ MIN_INIFILE_KEYS: tuple[str, ...] = (
     "NW_System",
 )
 
-# Secret parameter: its presence is confirmed, its VALUE is never read/logged.
-SECRET_KEY = "instkey.pkey"
+# Name of the secret key file: its PRESENCE is confirmed, its VALUE is never
+# read or logged. This is a filename constant, not a credential.
+SECRET_PKEY_FILENAME = "instkey.pkey"  # nosec B105 - filename constant, not a credential value
 
 
 @dataclass
@@ -140,7 +141,7 @@ def validate_inifile(inifile_path: str | None) -> InifileInfo:
     # params OR live as a sibling file next to inifile.params — check both, but
     # never read its contents.
     sibling_pkey = path.with_name("instkey.pkey")
-    has_secret = (SECRET_KEY in text) or sibling_pkey.exists()
+    has_secret = (SECRET_PKEY_FILENAME in text) or sibling_pkey.exists()
 
     return InifileInfo(path=str(path), keys_found=keys_found, has_secret_pkey=has_secret)
 
