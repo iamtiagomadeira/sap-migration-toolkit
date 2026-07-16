@@ -25,9 +25,9 @@ class RestoreDatabaseAction(Action):
     description = "Restore a database from data + log backups (driver: hana|ase)."
     destructive = True
     requires_checks = [
-        "backup-restore.hana.free-space",
-        "backup-restore.hana.log-mode",
-        "backup-restore.hana.backup-catalog",
+        "backup-restore.hana.target-data-space",
+        "backup-restore.hana.log-mode-normal",
+        "backup-restore.hana.catalog-integrity",
     ]
 
     def dry_run(self, ctx: Context) -> Result:

@@ -156,13 +156,22 @@ def test_rollback_is_documented_only() -> None:
 
 
 def test_full_run_action_with_prechecks_dry_run() -> None:
-    """End-to-end via run_action: no prechecks registered => guarded dry-run."""
+    """End-to-end via run_action: a failing blocking precheck aborts before execute.
+
+    After integration, ``requires_checks`` resolve to real HANA checks. Against a
+    bare FakeRunner these blocking checks fail, so the guarded flow correctly
+    aborts the pipeline *before* any state change — and never touches the runner
+    for the restore itself.
+    """
     runner = FakeRunner()
     ctx = _ctx(runner, db_type="ase", source="/dumps/full.dmp", target="PRD")
     action = RestoreDatabaseAction()
     prechecks = [
         cls() for c in action.requires_checks if (cls := registry.get_check(c)) is not None
     ]
+    # requires_checks must resolve to real, registered checks post-integration
+    assert prechecks, "requires_checks should resolve to registered checks"
     results = run_action(action, prechecks, ctx)
-    assert results[-1].name.endswith(".dry-run")
-    assert runner.calls == []
+    # a blocking precheck failed => action aborted, restore never executed
+    assert results[-1].status is Status.SKIP
+    assert "pre-checks" in results[-1].summary.lower()
