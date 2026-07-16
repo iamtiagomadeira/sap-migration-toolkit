@@ -29,3 +29,24 @@
     - "Fix the underlying issue, then restart from the same working directory (SWPM skips completed tasks)"
     - "Do NOT use SAPINST_SKIP_ERRORSTEP unless directed by an SAP Note"
   sap_note: "2568783"
+
+- pattern: "unknown product|invalid.*product.*id|SAPINST_EXECUTE_PRODUCT_ID.*not"
+  cause: "The SAPINST_EXECUTE_PRODUCT_ID does not match a product in this SWPM"
+  fix:
+    - "List valid product IDs with sapinst and pick the exact system-copy target product"
+    - "Confirm the SWPM version supports the source/target release combination"
+  sap_note: "2230669"
+
+- pattern: "waiting for input|waiting for the user|open .*browser.*sapinst"
+  cause: "sapinst is in an interactive dialog and needs a manual decision (observer mode)"
+  fix:
+    - "Open the sapinst GUI at https://<host>:4237/sapinst/docs/index.html and complete the dialog"
+    - "This is a handoff, not a failure — the headless run pauses until the input is provided"
+  sap_note: "2230669"
+
+- pattern: "not enough (disk )?space|filesystem full|no space left"
+  cause: "Insufficient free space on the target filesystem for the system copy"
+  fix:
+    - "Free space or extend the target filesystem before restarting sapinst"
+    - "Re-check the sizing against the source system database size"
+  sap_note: "950619"
