@@ -33,3 +33,76 @@
   fix:
     - "Set log_mode=normal in global.ini [persistence] and restart, then take a full data backup"
   sap_note: "1999993"
+
+# --- TIA-59: additional validated HANA backup/recovery entries ---------------
+
+- pattern: "backup catalog.*empty|backup catalog.*unreadable|catalog integrity cannot be confirmed"
+  cause: "Backup catalog is empty or unreadable at the target"
+  fix:
+    - "Restore/copy the backup catalog before recovery (catalog is required to pick a recovery point)"
+    - "Inspect the catalog with hdbbackupdiag --check or the backup.log"
+  sap_note: "1642148"
+
+- pattern: "data backup .*not successful|latest data backup.*not successful"
+  cause: "The most recent data backup did not complete successfully"
+  fix:
+    - "Take a fresh, successful full data backup before attempting recovery"
+    - "Check backup.log / M_BACKUP_CATALOG for the failing backup's error"
+  sap_note: "1642148"
+
+- pattern: "target revision.*older than source|version.*incompatible|recovery unsupported"
+  cause: "Target HANA revision is older than the source — recovery across a downgrade is unsupported"
+  fix:
+    - "Upgrade the target to a revision >= the source before recovering"
+    - "Recovery is only supported into an equal or newer HANA revision"
+  sap_note: "1642148"
+
+- pattern: "hdbuserstore key.*not found|user cannot connect|the user cannot connect"
+  cause: "Required hdbuserstore key is missing, so the user cannot authenticate to HANA"
+  fix:
+    - "Create the key: hdbuserstore SET <KEY> <host>:<3nn13> <user> <password>"
+    - "Verify with hdbuserstore LIST <KEY>"
+  sap_note: "2667632"
+
+- pattern: "backint selected but no.*parameter_file|backint.*not.*configured"
+  cause: "Backint is the backup destination but the parameter files are not configured"
+  fix:
+    - "Set data/log/catalog_backup_parameter_file in global.ini [backup]"
+    - "Confirm the backint agent (e.g. the backup tool's hdbbackint) is installed and executable"
+  sap_note: "2031547"
+
+- pattern: "permission denied.*backup path|cannot read backup path|sidadm cannot read"
+  cause: "The <sid>adm OS user lacks read permission on the backup path"
+  fix:
+    - "chown -R <sid>adm:sapsys on the backup directory (with the correct ownership for your setup)"
+    - "Ensure the mount is available and readable by <sid>adm before recovery"
+  sap_note: "1642148"
+
+- pattern: "backup path .*does not exist|backup destination.*not found"
+  cause: "The configured backup path does not exist on the target"
+  fix:
+    - "Create/mount the backup path and place the data + log backups there"
+    - "Point the recovery to the correct path/backint destination"
+  sap_note: "1642148"
+
+- pattern: "insufficient disk space for logs|log/trace.*space|no space.*log volume"
+  cause: "Not enough free space on the target log/trace volume"
+  fix:
+    - "Free space or extend /hana/log and the trace directory before recovery"
+    - "Recovery replays log backups and needs headroom on the log volume"
+  sap_note: "1999930"
+
+- pattern: "potentially-critical minicheck|minicheck.*critical"
+  cause: "HANA_Configuration_MiniChecks reported potentially-critical findings"
+  fix:
+    - "Review each flagged CHID against its guidance and remediate before migrating"
+    - "Re-run the minichecks until no potentially-critical rows remain"
+  sap_note: "1969700"
+
+- pattern: "encryption root key backup missing|root key.*not.*backed up"
+  cause: "Encryption is active but the root key backup is not available at the target"
+  fix:
+    - "Export the encryption root keys from the source and import them on the target"
+    - "Root keys are system-specific and mandatory to recover an encrypted backup"
+  sap_note: "2444090"
+
