@@ -15,6 +15,9 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
+# MkDocs build output
+site/
+
 # Exodia runtime state — never committed (secrets, per-host config)
 .exodia/
 *.pkey
