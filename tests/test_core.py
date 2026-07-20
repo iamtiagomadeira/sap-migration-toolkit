@@ -5,7 +5,7 @@ from __future__ import annotations
 from exodia.core import Context, Result, Status
 from exodia.core.knowledge import enrich, lookup
 from exodia.core.registry import registry
-from exodia.core.report import exit_code, worst_status
+from exodia.core.report import exit_code, tally, verdict_line, worst_status
 from exodia.core.runner import run_checks
 
 
@@ -58,3 +58,34 @@ def test_exit_code_and_worst_status() -> None:
     assert exit_code(good) == 0
     assert exit_code(bad) == 1
     assert worst_status(bad) is Status.FAIL
+
+
+def test_tally_counts_by_status() -> None:
+    results = [Result.ok("a"), Result.ok("b"), Result.warn("c", "m"), Result.fail("d", "x")]
+    counts = tally(results)
+    assert counts[Status.PASS] == 2
+    assert counts[Status.WARN] == 1
+    assert counts[Status.FAIL] == 1
+    assert counts[Status.SKIP] == 0
+
+
+def test_verdict_ready_when_all_pass() -> None:
+    line = verdict_line([Result.ok("a"), Result.ok("b")])
+    assert "Ready to proceed" in line
+    assert "2 passed" in line
+
+
+def test_verdict_caveats_when_only_warnings() -> None:
+    line = verdict_line([Result.ok("a"), Result.warn("b", "m")])
+    assert "Ready with caveats" in line
+    assert "1 warnings" in line
+
+
+def test_verdict_blocks_on_failure() -> None:
+    line = verdict_line([Result.ok("a"), Result.fail("b", "x"), Result.fail("c", "y")])
+    assert "NOT ready" in line
+    assert "2 blocking" in line
+
+
+def test_verdict_empty_is_safe() -> None:
+    assert "No checks ran" in verdict_line([])

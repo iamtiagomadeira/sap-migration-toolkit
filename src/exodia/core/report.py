@@ -68,6 +68,47 @@ def worst_status(results: list[Result]) -> Status:
     return worst
 
 
+def tally(results: list[Result]) -> dict[Status, int]:
+    """Count results by status."""
+    counts: dict[Status, int] = dict.fromkeys(Status, 0)
+    for r in results:
+        counts[r.status] += 1
+    return counts
+
+
+def verdict_line(results: list[Result]) -> str:
+    """A one-line summary + go/no-go verdict for a batch of checks.
+
+    Returns Rich markup: a per-status count line followed by a clear verdict —
+    green when nothing blocks, yellow when only warnings remain, red when a
+    blocking result means the operator must NOT proceed yet.
+    """
+    if not results:
+        return "[dim]No checks ran.[/]"
+    c = tally(results)
+    parts = [
+        f"[green]{c[Status.PASS]} passed[/]",
+        f"[yellow]{c[Status.WARN]} warnings[/]",
+        f"[red]{c[Status.FAIL] + c[Status.ERROR]} failed[/]",
+        f"[dim]{c[Status.SKIP]} skipped[/]",
+    ]
+    counts_line = "  ·  ".join(parts)
+    blocking = c[Status.FAIL] + c[Status.ERROR]
+    if blocking:
+        verdict = (
+            f"[bold red]⛔ NOT ready — resolve {blocking} blocking "
+            f"result{'s' if blocking != 1 else ''} before proceeding.[/]"
+        )
+    elif c[Status.WARN]:
+        verdict = (
+            "[bold yellow]⚠️  Ready with caveats — review the warnings, "
+            "then you may proceed.[/]"
+        )
+    else:
+        verdict = "[bold green]✅ Ready to proceed — all checks passed.[/]"
+    return f"{counts_line}\n{verdict}"
+
+
 def exit_code(results: list[Result]) -> int:
     """0 if nothing blocking, 1 otherwise — for CI/automation."""
     return 1 if any(r.status.is_blocking for r in results) else 0

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import typer
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 
 from . import __version__
@@ -244,6 +245,9 @@ def menu() -> None:
         ]
         results = run_checks(check_objs, ctx)
         report.render_table(results, f"Pre-checks: {methodology}", console)
+        console.print(
+            Panel(report.verdict_line(results), title="Verdict", border_style="cyan")
+        )
         raise typer.Exit(report.exit_code(results))
 
     op: Operation = group_ops[sel - 1]
