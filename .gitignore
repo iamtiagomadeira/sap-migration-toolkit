@@ -13,6 +13,9 @@ venv/
 .coverage
 htmlcov/
 .mypy_cache/
+
+# Evidence bundles — generated audit artifacts, may contain customer identifiers
+evidence/
 .ruff_cache/
 
 # Exodia runtime state — never committed (secrets, per-host config)

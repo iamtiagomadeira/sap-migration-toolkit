@@ -10,6 +10,7 @@ from rich.table import Table
 from . import __version__
 from .core import report
 from .core.context import Context
+from .core.evidence import EvidenceBundle, verify_bundle
 from .core.logging import configure
 from .core.menu import (
     STACKS,
@@ -275,11 +276,14 @@ def menu() -> None:
         check_objs = [
             cc() for c in group_checks if (cc := registry.get_check(c.name)) is not None
         ]
-        results = run_checks(check_objs, ctx)
+        bundle = EvidenceBundle(methodology, ctx, operation="run-all-pre-checks").open()
+        results = run_checks(check_objs, ctx, evidence=bundle)
+        bundle.close(results)
         report.render_table(results, f"Pre-checks: {methodology}", console)
         console.print(
             Panel(report.verdict_line(results), title="Verdict", border_style="cyan")
         )
+        console.print(f"[dim]📁 evidence: {bundle.dir}[/]")
         raise typer.Exit(report.exit_code(results))
 
     op: Operation = group_ops[sel - 1]
@@ -308,11 +312,12 @@ def menu() -> None:
 
     ctx = build_context(fields, params, execute=execute, assume_yes=assume_yes)
 
-    # Step 5: run
+    # Step 5: run — evidence captured automatically for the audit trail.
+    bundle = EvidenceBundle(methodology, ctx, operation=op.name).open()
     if op.kind == "check":
         check_cls = registry.get_check(op.name)
         assert check_cls is not None  # nosec B101 - from discovery
-        results = run_checks([check_cls()], ctx)
+        results = run_checks([check_cls()], ctx, evidence=bundle)
         title = f"Check: {op.name}"
     else:
         action_cls = registry.get_action(op.name)
@@ -321,11 +326,72 @@ def menu() -> None:
         prechecks = [
             pc() for c in action.requires_checks if (pc := registry.get_check(c)) is not None
         ]
-        results = run_action(action, prechecks, ctx)
+        results = run_action(action, prechecks, ctx, evidence=bundle)
         title = f"Action: {op.name}" + (" (dry-run)" if ctx.dry_run else "")
 
+    bundle.close(results)
     report.render_table(results, title, console)
+    console.print(f"[dim]📁 evidence: {bundle.dir}[/]")
     raise typer.Exit(report.exit_code(results))
+
+
+evidence_app = typer.Typer(name="evidence", help="Manage migration evidence bundles.")
+app.add_typer(evidence_app)
+
+
+@evidence_app.command("verify")
+def evidence_verify(bundle_dir: str) -> None:
+    """Re-hash a bundle's artifacts and report any tampering."""
+    problems = verify_bundle(bundle_dir)
+    if not problems:
+        console.print(f"[green]✅ evidence intact[/] — {bundle_dir}")
+        raise typer.Exit(0)
+    console.print(f"[red]⛔ evidence problems in {bundle_dir}:[/]")
+    for p in problems:
+        console.print(f"  • {p}")
+    raise typer.Exit(1)
+
+
+@evidence_app.command("attach")
+def evidence_attach(
+    bundle_dir: str,
+    file: str,
+    caption: str = typer.Option("", "--caption", "-c", help="Describe the attachment."),
+) -> None:
+    """Attach an external file (harvested log, screenshot) to an existing bundle.
+
+    Re-seals the manifest so the new artifact is hashed and tamper-evident.
+    """
+    from pathlib import Path
+
+    d = Path(bundle_dir)
+    if not (d / "manifest.json").is_file():
+        console.print(f"[red]not an evidence bundle:[/] {bundle_dir}")
+        raise typer.Exit(1)
+    import json
+    import shutil
+
+    from .core.evidence import _sha256  # noqa: PLC2701 - internal helper reuse
+
+    src = Path(file)
+    if not src.is_file():
+        console.print(f"[red]not a file:[/] {file}")
+        raise typer.Exit(1)
+    dest = d / "artifacts" / src.name
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dest)
+    # Re-seal manifest: add/refresh the artifact list with fresh hashes.
+    manifest = json.loads((d / "manifest.json").read_text())
+    artifacts = []
+    for f in sorted(d.rglob("*")):
+        if f.is_file() and f.name != "manifest.json":
+            artifacts.append(
+                {"path": str(f.relative_to(d)), "sha256": _sha256(f), "bytes": f.stat().st_size}
+            )
+    manifest["artifacts"] = artifacts
+    manifest.setdefault("attachments", []).append({"file": src.name, "caption": caption})
+    (d / "manifest.json").write_text(json.dumps(manifest, indent=2, default=str))
+    console.print(f"[green]✅ attached[/] {src.name} → {dest.parent}")
 
 
 if __name__ == "__main__":
