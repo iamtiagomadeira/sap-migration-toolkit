@@ -34,6 +34,7 @@ from .core.menu import (
     spec_for,
     stack_blocks,
 )
+from .core.monitor import get_monitor
 from .core.registry import registry
 from .core.runner import run_action, run_checks
 
@@ -150,6 +151,11 @@ def run_op(
     yes: bool = typer.Option(False, "--yes", help="Skip confirmation for actions."),
     config: str | None = typer.Option(None, "--config", help="YAML config (escape hatch)."),
     as_json: bool = typer.Option(False, "--json", help="Emit JSON instead of a table."),
+    monitor: bool = typer.Option(
+        False,
+        "--monitor",
+        help="Show a live dashboard for long-running actions (progress, log tail, results).",
+    ),
 ) -> None:
     """Run a check or a guarded action by name."""
     ctx = _build_context(host, user, db_type, source, target, dry_run, yes, config)
@@ -172,8 +178,18 @@ def run_op(
             pc_cls = registry.get_check(c)
             if pc_cls is not None:
                 prechecks.append(pc_cls())
-        results = run_action(action, prechecks, ctx)
         title = f"Action: {name}" + (" (dry-run)" if ctx.dry_run else "")
+        if monitor and not as_json:
+            # Live dashboard: stream each phase result into the monitor as it lands.
+            mon = get_monitor(title, enabled=True)
+            with mon:
+                mon.phase("pre-checks")
+                results = run_action(action, prechecks, ctx)
+                for r in results:
+                    mon.result(r)
+                mon.phase("done")
+        else:
+            results = run_action(action, prechecks, ctx)
 
     if as_json:
         console.print_json(report.render_json(results))
