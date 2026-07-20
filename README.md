@@ -1,5 +1,13 @@
 # SAP Migration Toolkit
 
+<p>
+  <a href="https://github.com/iamtiagomadeira/sap-migration-toolkit/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/iamtiagomadeira/sap-migration-toolkit/actions/workflows/ci.yml/badge.svg" /></a>
+  <a href="https://github.com/iamtiagomadeira/sap-migration-toolkit/actions/workflows/codeql.yml"><img alt="CodeQL" src="https://github.com/iamtiagomadeira/sap-migration-toolkit/actions/workflows/codeql.yml/badge.svg" /></a>
+  <img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-blue" />
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green" /></a>
+  <a href="CONTRIBUTING.md"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen" /></a>
+</p>
+
 > _Codename: Exodia_ — Stateless executor for SAP migration operations — checks & actions for HANA/ASE
 > backup-restore, tenant copy, HANA System Replication (HSR), and Java (AS Java) system copy.
 
@@ -53,6 +61,30 @@ exodia doctor                            # self-check
 Dry-run is the default for actions. Pass `--execute --yes` to actually run.
 Exit codes are automation-friendly: `0` = nothing blocking, `1` = a blocking failure.
 
+## Example: a guarded HANA restore
+
+A typical system-copy cutover, showing the safety model end to end:
+
+```bash
+# 1. Read-only pre-checks — safe to run any time, changes nothing
+exodia run backup-restore.prepare --db-type hana --source PRD --target QAS
+#   ✓ target disk space sufficient   ✓ backup catalog reachable
+#   ✓ target SID stopped             ✗ log_mode = normal (expected: overwrite)
+#   → exit 1: one blocking issue, nothing was changed
+
+# 2. Fix the flagged item, then preview the real action (dry-run is default)
+exodia run backup-restore.restore-db --db-type hana --source PRD --target QAS
+#   [DRY-RUN] would run: HDBSettings.sh recoverSys.py --command="RECOVER DATABASE ..."
+#   [DRY-RUN] would verify: SYSTEMDB + tenant reach state 'OK'
+
+# 3. Execute for real — explicit opt-in required
+exodia run backup-restore.restore-db --db-type hana --source PRD --target QAS --execute --yes
+#   → pre-checks → execute → verify → on failure, documented rollback steps
+```
+
+Every action follows the same path: **pre-checks → dry-run → confirm → execute →
+verify → rollback**. You never touch a destructive step without seeing it first.
+
 ## Status
 
 Alpha. The core execution engine is stable. Methodology modules — backup/restore
@@ -69,6 +101,12 @@ and what's planned.
 | Tenant Copy | HANA | TLS/SSL, SYSTEMDB cert handling |
 | HANA System Replication | HANA | create / finalize / enable replica |
 | Java (AS Java) system copy | HANA | SLD, SECSTORE, RFC, UME post-copy (PI/PO validated first) |
+
+## Contributing
+
+Contributions are welcome — new methodology modules, checks, and SAP Note mappings
+especially. See [CONTRIBUTING.md](CONTRIBUTING.md) to get started, and please report
+security issues privately per our [security policy](SECURITY.md).
 
 ## License
 
