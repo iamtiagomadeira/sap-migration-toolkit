@@ -1,0 +1,39 @@
+# HANA cross-host tenant copy known errors -> cause + generic fix + SAP Note.
+# TIA-71. Patterns match hdbsql / system-replication error text seen during a
+# cross-host tenant copy (customer source -> SAP HEC target).
+
+- pattern: "database .* already exists|tenant .* already exists|CREATE DATABASE failed.*exists"
+  cause: "The target tenant already exists — a tenant copy will not overwrite it"
+  fix:
+    - "Pick a different target tenant name, or DROP DATABASE <target> on the target SYSTEMDB first"
+    - "Re-run the tenant-copy.hana.target-tenant-absent pre-check to confirm"
+  sap_note: "2101244"
+
+- pattern: "replica.*not.*sync|system replication.*error|replication status.*(error|unknown)|cannot connect to primary"
+  cause: "Cross-host system replication could not be established or fell out of sync"
+  fix:
+    - "Confirm the target can reach the source SYSTEMDB SQL port (3<nn>13)"
+    - "Verify the source server certificate is imported into the target trust store"
+    - "Check log_mode=normal on the source and that a full data backup exists"
+  sap_note: "2456657"
+
+- pattern: "certificate.*(invalid|not trusted|verify failed)|ssl.*handshake.*fail|PKI.*error|trust store"
+  cause: "The encrypted cross-host link failed TLS validation (missing/invalid trust collateral)"
+  fix:
+    - "Export the source SYSTEMDB server certificate and import it into the target trust store"
+    - "Confirm target_trust_store points at the SECUDIR trust.pem the target actually uses"
+  sap_note: "2456657"
+
+- pattern: "revision .*older|version.*mismatch|downgrade.*not.*allowed|incompatible.*version"
+  cause: "Target HANA revision is older than the source — a tenant copy cannot downgrade"
+  fix:
+    - "Patch the target system to a revision >= the source revision"
+    - "Re-run the tenant-copy.hana.version-match pre-check"
+  sap_note: "2101244"
+
+- pattern: "license.*(expired|invalid|not valid)|no valid license|PRODUCT_LIMIT.*exceeded"
+  cause: "The target system license does not permit provisioning another tenant"
+  fix:
+    - "Install a valid HANA license on the target SYSTEMDB before creating the tenant"
+    - "Re-run the tenant-copy.hana.target-license pre-check"
+  sap_note: "2101244"

@@ -98,7 +98,7 @@ and what's planned.
 | Methodology | Databases | Notes |
 |---|---|---|
 | Backup / Restore | HANA, SAP ASE | via native tools + SWPM system copy |
-| Tenant Copy | HANA | TLS/SSL, SYSTEMDB cert handling |
+| Tenant Copy | HANA | cross-host (customer → target), replication or backup method, TLS/SSL SYSTEMDB cert handling |
 | HANA System Replication | HANA | create / finalize / enable replica |
 | Java (AS Java) system copy | HANA | SLD, SECSTORE, RFC, UME post-copy (PI/PO validated first) |
 
