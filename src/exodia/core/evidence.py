@@ -38,6 +38,7 @@ from .logging import get_logger
 
 if TYPE_CHECKING:
     from .context import Context
+    from .monitor import Monitor
     from .result import Result
 
 from .result import format_duration
@@ -380,6 +381,91 @@ def list_bundles(root: Path | str = _DEFAULT_ROOT) -> list[dict]:
         )
     rows.sort(key=lambda x: x.get("started") or x.get("sealed") or "", reverse=True)
     return rows
+
+
+def read_events(bundle_dir: Path | str) -> list[dict]:
+    """Read the append-only ``run.jsonl`` event trail of a bundle, in order.
+
+    Tolerant of a partially-written trailing line (a crash mid-flush): malformed
+    lines are skipped so a live/interrupted operation can still be reattached.
+    """
+    path = Path(bundle_dir) / "run.jsonl"
+    if not path.is_file():
+        return []
+    events: list[dict] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            events.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue  # partial trailing write from an in-flight run
+    return events
+
+
+def find_active_bundle(root: Path | str = _DEFAULT_ROOT) -> Path | None:
+    """Return the newest bundle that has a ``run.jsonl`` but is not yet sealed.
+
+    A sealed bundle has ``sealed`` set in its manifest; an operation still in
+    flight has events but no seal. Used by ``exodia run --reattach`` to find the
+    operation to reconnect to after a dropped SSH session.
+    """
+    r = Path(root)
+    if not r.is_dir():
+        return None
+    candidates: list[tuple[str, Path]] = []
+    for jsonl in r.rglob("run.jsonl"):
+        d = jsonl.parent
+        manifest = d / "manifest.json"
+        sealed = ""
+        if manifest.is_file():
+            try:
+                m = json.loads(manifest.read_text())
+                sealed = m.get("sealed", "")
+            except (OSError, json.JSONDecodeError):
+                pass
+        if sealed:
+            continue  # already finished
+        # Order by the newest event timestamp in the trail.
+        events = read_events(d)
+        last_ts = events[-1]["ts"] if events and "ts" in events[-1] else ""
+        candidates.append((last_ts or "", d))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    return candidates[0][1]
+
+
+def replay_events(bundle_dir: Path | str, monitor: Monitor) -> int:
+    """Push a bundle's persisted events into a monitor to rebuild its state.
+
+    Reconstructs phase, log tail and per-result rows (with their persisted
+    timing) from ``run.jsonl`` so ``--reattach`` shows the same dashboard the
+    original operator saw. Returns the number of events replayed.
+    """
+    from .result import Result, Status
+
+    events = read_events(bundle_dir)
+    for ev in events:
+        kind = ev.get("kind")
+        if kind == "phase":
+            monitor.phase(str(ev.get("name", "")), str(ev.get("detail", "")))
+        elif kind == "log":
+            monitor.log_line(str(ev.get("line", "")))
+        elif kind == "result":
+            try:
+                status = Status(ev.get("status", "pass"))
+            except ValueError:
+                status = Status.PASS
+            r = Result(
+                name=str(ev.get("name", "?")),
+                status=status,
+                summary=str(ev.get("summary", "")),
+            )
+            r.duration_seconds = ev.get("duration_seconds")
+            monitor.result(r)
+    return len(events)
 
 
 _HTML_STATUS_COLOR = {

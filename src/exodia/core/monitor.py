@@ -28,6 +28,8 @@ Upgrade path to Textual (TIA-66):
 
 from __future__ import annotations
 
+import os
+import re
 from collections import deque
 from datetime import UTC, datetime
 from types import TracebackType
@@ -56,6 +58,23 @@ _STATUS_ICON = {
     Status.SKIP: "⏭️ ",
     Status.ERROR: "💥",
 }
+# ASCII fallbacks for CI / enterprise terminals without UTF-8 (--no-emoji, TIA-76).
+_STATUS_ASCII = {
+    Status.PASS: "[PASS]",
+    Status.WARN: "[WARN]",
+    Status.FAIL: "[FAIL]",
+    Status.SKIP: "[SKIP]",
+    Status.ERROR: "[ERR ]",
+}
+
+# Severity highlighting for the native log tail (TIA-74).
+_LOG_ERROR_RE = re.compile(r"\b(error|fatal|severe|failed|failure|abend|abort)\b", re.I)
+_LOG_WARN_RE = re.compile(r"\b(warn|warning)\b", re.I)
+
+
+def _no_color_env() -> bool:
+    """Honour the NO_COLOR convention (https://no-color.org) — any non-empty value."""
+    return bool(os.environ.get("NO_COLOR"))
 
 
 @runtime_checkable
@@ -132,10 +151,16 @@ class RichMonitor:
         console: Console | None = None,
         log_lines: int = 12,
         refresh_per_second: int = 8,
+        no_emoji: bool = False,
     ) -> None:
         self.title = title
-        self.console = console or Console()
-        self._log: deque[str] = deque(maxlen=max(1, log_lines))
+        self._no_color = _no_color_env()
+        self.console = console or Console(no_color=self._no_color)
+        # --no-emoji, or NO_COLOR, drops the status glyphs for plain ASCII tags.
+        self._no_emoji = no_emoji or self._no_color
+        # Each log entry keeps its arrival time so the tail lines up with the
+        # audit clock (TIA-73): (HH:MM:SS, text).
+        self._log: deque[tuple[str, str]] = deque(maxlen=max(1, log_lines))
         self._results: list[Result] = []
         self._phase = "starting…"
         self._phase_detail = ""
@@ -152,6 +177,12 @@ class RichMonitor:
             refresh_per_second=refresh_per_second,
             transient=False,
         )
+
+    def _status_glyph(self, status: Status) -> str:
+        """Emoji glyph normally; ASCII tag under --no-emoji / NO_COLOR."""
+        if self._no_emoji:
+            return _STATUS_ASCII.get(status, f"[{status.value.upper()}]")
+        return _STATUS_ICON.get(status, "")
 
     # -- lifecycle ---------------------------------------------------------- #
     def start(self) -> None:
@@ -197,9 +228,12 @@ class RichMonitor:
         self._refresh()
 
     def log_line(self, line: str) -> None:
-        # Accept multi-line chunks (e.g. a block read from a log file).
+        # Accept multi-line chunks (e.g. a block read from a log file). Each line
+        # is stamped with its arrival time (TIA-73) so the tail aligns with the
+        # phase stopwatch and the audit clock.
+        ts = datetime.now(UTC).strftime("%H:%M:%S")
         for ln in line.rstrip("\n").splitlines() or [""]:
-            self._log.append(ln)
+            self._log.append((ts, ln))
         self._refresh()
 
     def result(self, result: Result) -> None:
@@ -214,6 +248,23 @@ class RichMonitor:
     def _refresh(self) -> None:
         if self._live.is_started:
             self._live.update(self._render())
+
+    def _verdict_line(self, now: datetime) -> Text:
+        """A compact verdict footer: per-status counts + total elapsed (TIA-75)."""
+        counts = dict.fromkeys(Status, 0)
+        for r in self._results:
+            counts[r.status] += 1
+        line = Text()
+        order = [Status.PASS, Status.WARN, Status.FAIL, Status.SKIP, Status.ERROR]
+        segments = [(s, counts[s]) for s in order if counts[s]]
+        for i, (s, n) in enumerate(segments):
+            if i:
+                line.append(" · ", style="dim")
+            style = "" if self._no_color else _STATUS_STYLE.get(s, "")
+            line.append(f"{n} {s.value}", style=style)
+        elapsed = (now - self._started_at).total_seconds()
+        line.append(f"  —  took {format_duration(elapsed)}", style="dim")
+        return line
 
     def _render(self) -> Group:
         parts: list[RenderableType] = []
@@ -238,7 +289,19 @@ class RichMonitor:
             parts.append(Group(bar, label))
 
         if self._log:
-            log_text = Text("\n".join(self._log), style="grey70")
+            log_text = Text()
+            for i, (ts, ln) in enumerate(self._log):
+                if i:
+                    log_text.append("\n")
+                log_text.append(f"{ts}  ", style="dim" if not self._no_color else "")
+                # Highlight severity so failures pop in a long SWPM tail (TIA-74).
+                if _LOG_ERROR_RE.search(ln):
+                    line_style = "" if self._no_color else "bold red"
+                elif _LOG_WARN_RE.search(ln):
+                    line_style = "" if self._no_color else "yellow"
+                else:
+                    line_style = "" if self._no_color else "grey70"
+                log_text.append(ln, style=line_style)
             parts.append(Panel(log_text, title="native log", border_style="grey37"))
 
         if self._results:
@@ -248,15 +311,17 @@ class RichMonitor:
             table.add_column("duration", width=10, justify="right")
             table.add_column("summary", overflow="fold")
             for r in self._results:
-                icon = _STATUS_ICON.get(r.status, "")
-                style = _STATUS_STYLE.get(r.status, "")
+                glyph = self._status_glyph(r.status)
+                style = "" if self._no_color else _STATUS_STYLE.get(r.status, "")
                 table.add_row(
-                    Text(f"{icon} {r.status.value}", style=style),
+                    Text(f"{glyph} {r.status.value}", style=style),
                     r.name,
                     Text(r.duration_str, style="dim"),
                     r.summary,
                 )
             parts.append(table)
+            # Verdict footer: status counts + total operation duration (TIA-75).
+            parts.append(self._verdict_line(now))
 
         if self._handoff is not None:
             msg, url = self._handoff
@@ -283,6 +348,6 @@ class RichMonitor:
         )
 
 
-def get_monitor(title: str, *, enabled: bool = True) -> Monitor:
+def get_monitor(title: str, *, enabled: bool = True, no_emoji: bool = False) -> Monitor:
     """Factory: a live RichMonitor when enabled, else a silent NullMonitor."""
-    return RichMonitor(title) if enabled else NullMonitor()
+    return RichMonitor(title, no_emoji=no_emoji) if enabled else NullMonitor()

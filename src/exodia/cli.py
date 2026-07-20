@@ -15,9 +15,11 @@ from .core import report
 from .core.context import ConfigError, Context
 from .core.evidence import (
     EvidenceBundle,
+    find_active_bundle,
     find_latest_bundle,
     list_bundles,
     render_html,
+    replay_events,
     verify_bundle,
 )
 from .core.logging import configure
@@ -157,6 +159,12 @@ def run_op(
         "--monitor",
         help="Show a live dashboard for long-running actions (progress, log tail, results).",
     ),
+    no_emoji: bool = typer.Option(
+        False,
+        "--no-emoji",
+        help="Use ASCII status tags instead of emoji (CI / non-UTF-8 terminals). "
+        "NO_COLOR is also honoured automatically.",
+    ),
 ) -> None:
     """Run a check or a guarded action by name."""
     ctx = _build_context(host, user, db_type, source, target, dry_run, yes, config)
@@ -182,7 +190,7 @@ def run_op(
         title = f"Action: {name}" + (" (dry-run)" if ctx.dry_run else "")
         if monitor and not as_json:
             # Live dashboard: stream each phase result into the monitor as it lands.
-            mon = get_monitor(title, enabled=True)
+            mon = get_monitor(title, enabled=True, no_emoji=no_emoji)
             with mon:
                 mon.phase("pre-checks")
                 results = run_action(action, prechecks, ctx)
@@ -195,7 +203,7 @@ def run_op(
     if as_json:
         console.print_json(report.render_json(results))
     else:
-        report.render_table(results, title, console)
+        report.render_table(results, title, console, no_emoji=no_emoji)
 
     raise typer.Exit(report.exit_code(results))
 
@@ -520,6 +528,44 @@ def history_cmd(
     console.print(table)
     if len(rows) > limit:
         console.print(f"[dim]… {len(rows) - limit} older run(s) not shown (use --limit).[/]")
+
+
+@app.command(name="reattach")
+def reattach_cmd(
+    bundle_dir: str = typer.Argument(
+        "",
+        help="Bundle to reattach to. Omit to auto-detect the newest unsealed run.",
+    ),
+    root: str = typer.Option("evidence", "--root", help="Evidence root directory."),
+    no_emoji: bool = typer.Option(
+        False, "--no-emoji", help="ASCII status tags (CI / non-UTF-8 terminals)."
+    ),
+) -> None:
+    """Reconnect the live dashboard to an operation already in flight.
+
+    A restore/recovery can run for hours; if the SSH session drops you lose the
+    dashboard but not the operation. ``reattach`` rebuilds the dashboard from the
+    bundle's persisted event trail (run.jsonl) — phase, log tail and per-result
+    timing — so you can keep watching. With no argument it finds the newest
+    bundle that has events but is not yet sealed.
+    """
+    from pathlib import Path
+
+    target = Path(bundle_dir) if bundle_dir else find_active_bundle(root)
+    if target is None:
+        console.print(
+            f"[yellow]no in-flight operation found under[/] {root!r} "
+            "(nothing unsealed with events to reattach to)."
+        )
+        raise typer.Exit(0)
+    if not (target / "run.jsonl").is_file():
+        console.print(f"[red]no event trail (run.jsonl) in[/] {target}")
+        raise typer.Exit(1)
+
+    mon = get_monitor(f"Reattached: {target.name}", enabled=True, no_emoji=no_emoji)
+    with mon:
+        n = replay_events(target, mon)
+    console.print(f"[dim]replayed {n} event(s) from {target}[/]")
 
 
 if __name__ == "__main__":
