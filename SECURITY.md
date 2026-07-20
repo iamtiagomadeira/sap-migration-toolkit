@@ -22,7 +22,7 @@ branch yet.
 Please report privately via one of:
 
 - GitHub **Security Advisories**: open a draft advisory at
-  <https://github.com/iamtiagomadeira/exodia/security/advisories/new>
+  <https://github.com/iamtiagomadeira/sap-migration-toolkit/security/advisories/new>
   (preferred — keeps the report private and coordinated).
 - Email the maintainer: **tiago.filipe.madeira@gmail.com** with subject
   `EXODIA SECURITY`.

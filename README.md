@@ -1,9 +1,9 @@
-# Exodia
+# SAP Migration Toolkit
 
-> Stateless executor for SAP migration operations — checks & actions for HANA/ASE
+> _Codename: Exodia_ — Stateless executor for SAP migration operations — checks & actions for HANA/ASE
 > backup-restore, tenant copy, HANA System Replication (HSR), and Java (AS Java) system copy.
 
-Exodia is a lightweight, plugable command-line tool that automates the repetitive,
+SAP Migration Toolkit is a lightweight, plugable command-line tool that automates the repetitive,
 error-prone parts of SAP system migrations. It runs on any Linux server, needs no
 database of its own, and never phones home. Think of it as `ansible --check` meets
 a SAP Basis runbook: it validates prerequisites, then executes migration steps with
