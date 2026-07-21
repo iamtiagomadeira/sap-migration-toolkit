@@ -339,3 +339,26 @@ def test_tenant_copy_readiness_verdict_skip_bare_context() -> None:
     results = run_runbook(rb, ctx)
     verdict = results[-1]
     assert verdict.status is not Status.PASS
+
+
+def test_sided_runbooks_split_all_checks() -> None:
+    """The source+target side runbooks together cover exactly the 11 checks."""
+    src = registry.get_runbook("tenant-copy.hana.readiness-source")
+    tgt = registry.get_runbook("tenant-copy.hana.readiness-target")
+    full = registry.get_runbook("tenant-copy.hana.readiness")
+    assert src is not None and tgt is not None and full is not None
+    src_steps = set(src().steps)
+    tgt_steps = set(tgt().steps)
+    # every step resolves to a real check
+    for s in src_steps | tgt_steps:
+        assert registry.get_check(s) is not None, f"unresolved: {s}"
+    # union covers the full readiness set, with no accidental overlap
+    assert src_steps | tgt_steps == set(full().steps)
+    assert src_steps.isdisjoint(tgt_steps)
+
+
+def test_source_runbook_only_source_checks() -> None:
+    """Source-side runbook must not include any target-only check."""
+    src = registry.get_runbook("tenant-copy.hana.readiness-source")()
+    assert all("target" not in s and "cross-host" not in s for s in src.steps)
+
