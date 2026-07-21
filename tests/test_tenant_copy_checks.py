@@ -342,7 +342,7 @@ def test_tenant_copy_readiness_verdict_skip_bare_context() -> None:
 
 
 def test_sided_runbooks_split_all_checks() -> None:
-    """The source+target side runbooks together cover exactly the 11 checks."""
+    """The source+target side runbooks are disjoint and cover the full set."""
     src = registry.get_runbook("tenant-copy.hana.readiness-source")
     tgt = registry.get_runbook("tenant-copy.hana.readiness-target")
     full = registry.get_runbook("tenant-copy.hana.readiness")
@@ -352,9 +352,9 @@ def test_sided_runbooks_split_all_checks() -> None:
     # every step resolves to a real check
     for s in src_steps | tgt_steps:
         assert registry.get_check(s) is not None, f"unresolved: {s}"
-    # union covers the full readiness set, with no accidental overlap
-    assert src_steps | tgt_steps == set(full().steps)
+    # the two sides are disjoint and together cover every full-readiness check
     assert src_steps.isdisjoint(tgt_steps)
+    assert set(full().steps) <= (src_steps | tgt_steps)
 
 
 def test_source_runbook_only_source_checks() -> None:

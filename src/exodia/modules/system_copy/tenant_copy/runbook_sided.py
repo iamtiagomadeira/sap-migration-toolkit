@@ -39,6 +39,8 @@ class SourceReadinessRunbook(Runbook):
     steps = [
         "tenant-copy.hana.source-userstore-key",
         "tenant-copy.hana.source-tenant-online",
+        "tenant-copy.hana.source-ports",
+        "tenant-copy.hana.source-replication-parameters",
         "tenant-copy.hana.source-replication-status",
     ]
 
@@ -56,6 +58,8 @@ class TargetReadinessRunbook(Runbook):
     steps = [
         "tenant-copy.hana.target-userstore-key",
         "tenant-copy.hana.target-tenant-absent",
+        "tenant-copy.hana.target-ports",
+        "tenant-copy.hana.target-replication-parameters",
         "tenant-copy.hana.cross-host-reachability",
         "tenant-copy.hana.version-match",
         "tenant-copy.hana.ssl-collateral",

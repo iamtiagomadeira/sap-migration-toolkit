@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Tenant copy — COP-derived checks & actions (from the real dry-run runbook).**
+  - Checks: `source-ports` / `target-ports` (HANA service ports from
+    `M_SERVICES`, incl. the SQL/replication port) and `source-replication-
+    parameters` / `target-replication-parameters` (the exact HSR/SSL/persistence
+    `global.ini` keys from `M_INIFILE_CONTENTS`). Wired into the side-scoped
+    readiness runbooks.
+  - `configure-hsr-parameters`: applies the SAP best-practice system-replication
+    tuning + SSL parameter set via `ALTER SYSTEM ALTER CONFIGURATION ... WITH
+    RECONFIGURE`, with an operator-selected **SSL on/off** mode (the two exact
+    parameter sets from the runbook) and a restart-required flag.
+  - `restart-hana`: guarded `HDB stop` + `HDB start` for when the parameter
+    changes need a DB restart.
+  - **Dry-Run / Mock-Run isolation** actions (`mock-isolate-users`,
+    `mock-isolate-rfcs`, `mock-stop-jobs`): the COP "Isolate System (Mock-Run
+    Only)" section — lock USR02 users (sparing DDIC + keep-list), neutralise
+    RFCDES destinations, stop TBTCO jobs — each backing up the table first and
+    with a real restore-from-backup rollback. Downtime phase, dry-run gated.
 - **`exodia cutover-plan` + config templates — the day-of starter kit.** A new
   read-only command prints the whole SAP MIG cutover playbook (the four phases,
   in order, with every exact command and the safety gates ⛔/✋ flagged) as a
