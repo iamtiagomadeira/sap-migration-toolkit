@@ -596,39 +596,64 @@ def test_runbook_stop_on_blocking_halts_early() -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_profile_parameter_parity_match() -> None:
-    same = _read_table_rows(
-        [
-            {"PARNAME": "login/system_client", "PVALUE": "100"},
-            {"PARNAME": "rdisp/max_wprun_time", "PVALUE": "600"},
-        ]
-    )
-    ctx = FakeContext(params=_SRC_TGT).bind(lambda fm, kw: same)
-    r = _run_check("abap.readiness.profile-parameter-parity", ctx)
+def test_source_profiles_capture_ok() -> None:
+    from exodia.core.shell import CommandResult
+
+    class _RunnerCtx(Context):
+        def runner(self):  # type: ignore[override]
+            class _R:
+                def run(self, argv, timeout=300, input_text=None):
+                    # `ls -1 /sapmnt/PRD/profile`
+                    return CommandResult(argv, 0, "DEFAULT.PFL\nPRD_D00_host\nPRD_ASCS01_host\n", "")
+
+            return _R()
+
+    ctx = _RunnerCtx(params={"source_sid": "PRD"})
+    r = _run_check("abap.readiness.source-profiles", ctx)
     assert r.status is Status.PASS
-    assert r.phase.value == "preparation"
+    assert r.data["default_profile_present"] is True
+    assert r.data["instance_profile_count"] == 2
+    assert r.facts["DEFAULT.PFL"] == "present"
 
 
-def test_profile_parameter_parity_differ_warns() -> None:
-    src = lambda fm, kw: _read_table_rows(  # noqa: E731
-        [{"PARNAME": "login/system_client", "PVALUE": "100"}]
-    )
-    tgt = lambda fm, kw: _read_table_rows(  # noqa: E731
-        [{"PARNAME": "login/system_client", "PVALUE": "200"}]
-    )
-    ctx = FakeContext(params=_SRC_TGT).bind_sides(src, tgt)
-    r = _run_check("abap.readiness.profile-parameter-parity", ctx)
+def test_source_profiles_missing_default_warns() -> None:
+    from exodia.core.shell import CommandResult
+
+    class _RunnerCtx(Context):
+        def runner(self):  # type: ignore[override]
+            class _R:
+                def run(self, argv, timeout=300, input_text=None):
+                    return CommandResult(argv, 0, "PRD_D00_host\n", "")
+
+            return _R()
+
+    ctx = _RunnerCtx(params={"source_sid": "PRD"})
+    r = _run_check("abap.readiness.source-profiles", ctx)
     assert r.status is Status.WARN
-    assert "login/system_client" in r.data["differing"]
+    assert r.data["default_profile_present"] is False
 
 
-def test_profile_parameter_parity_source_only() -> None:
-    ctx = FakeContext(params=_SRC).bind(
-        lambda fm, kw: _read_table_rows([{"PARNAME": "login/system_client", "PVALUE": "100"}])
-    )
-    r = _run_check("abap.readiness.profile-parameter-parity", ctx)
+def test_source_profiles_skip_without_sid() -> None:
+    ctx = FakeContext(params={}).bind(lambda fm, kw: {})
+    r = _run_check("abap.readiness.source-profiles", ctx)
+    assert r.status is Status.SKIP
+
+
+def test_target_profiles_capture_ok() -> None:
+    from exodia.core.shell import CommandResult
+
+    class _RunnerCtx(Context):
+        def runner(self):  # type: ignore[override]
+            class _R:
+                def run(self, argv, timeout=300, input_text=None):
+                    return CommandResult(argv, 0, "DEFAULT.PFL\nQAS_D00_host\n", "")
+
+            return _R()
+
+    ctx = _RunnerCtx(params={"target_sid": "QAS"})
+    r = _run_check("abap.readiness.target-profiles", ctx)
     assert r.status is Status.PASS
-    assert "source_params" in r.data
+    assert r.facts["Side"] == "Target"
 
 
 def test_system_change_option_reads_flag() -> None:

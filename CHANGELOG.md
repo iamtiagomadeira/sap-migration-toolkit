@@ -10,13 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **SAP MIG ABAP readiness — Phase 2 (Tier A).** Expanded the read-only ABAP
-  check set to 16, all tagged with cutover phase + human-readable title + facts:
-  4 new checks — `profile-parameter-parity` (RZ10/RZ11 source-vs-target),
-  `system-change-option` (SE06), `installation-consistency` (SICK/SM28) and
-  `batch-input-sessions` (SM35) — plus the existing 12 (SM12, SM13/SMQ, SM37,
-  SM04, SP01, ST22, STMS/SE01, SM51, SCC4/T000, SM59, CVERS, RFC_SYSTEM_INFO)
-  now carrying phase/title/facts. New runbook `abap.pre-migration-checks`
-  bundles all 16 in cutover order (Preparation → Ramp-Down → Post-Activities).
+  check set, all tagged with cutover phase + human-readable title + facts:
+  new checks — `source-profiles` / `target-profiles` (capture DEFAULT.PFL +
+  instance profiles per side), `system-change-option` (SE06),
+  `installation-consistency` (SICK/SM28) and `batch-input-sessions` (SM35) —
+  plus the existing checks (SM12, SM13/SMQ, SM37, SM04, SP01, ST22, STMS/SE01,
+  SM51, SCC4/T000, SM59, CVERS, RFC_SYSTEM_INFO) now carrying phase/title/facts.
+  New runbook `abap.pre-migration-checks` bundles them in cutover order
+  (Preparation → Ramp-Down → Post-Activities).
+- **Profile backup action** (`abap.profile-backup`) — guarded action that backs
+  up the SAP profiles (`/sapmnt/<SID>/profile`) and, in `global` scope, the
+  fundamental global directories (`/sapmnt/<SID>/global`) to a chosen location
+  over SSH (dry-run → confirm → execute → verify). Typical flow: back up the
+  source profiles, then back up the target profiles + global folder.
 - **Phase-grouped, human-readable evidence report.** Results now carry a cutover
   ``phase`` (Preparation / Ramp-Down / Downtime / Post-Activities — mirroring the
   ECS/HEC Cutover Plan), an explicit action-oriented ``title`` (e.g. "SM12 —

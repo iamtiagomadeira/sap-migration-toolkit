@@ -37,7 +37,8 @@ class PreMigrationChecksRunbook(Runbook):
         "abap.readiness.app-servers",
         "abap.readiness.client-settings",
         "abap.readiness.rfc-destinations",
-        "abap.readiness.profile-parameter-parity",
+        "abap.readiness.source-profiles",
+        "abap.readiness.target-profiles",
         "abap.readiness.system-change-option",
         "abap.readiness.installation-consistency",
         # --- Ramp-down (quiesce the source) ----------------------------------

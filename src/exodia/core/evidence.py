@@ -19,8 +19,7 @@ Design goals:
 - **Tamper-evident**: manifest records the SHA-256 of each artifact; an auditor
   re-hashes to prove nothing was altered after the fact.
 - **Searchable**: JSONL / JSON, not images.
-- **Chain of custody**: operator, host, source->target, tool version, ticket,
-  timestamps.
+- **Chain of custody**: operator, host, SID, tool version, ticket, timestamps.
 """
 
 from __future__ import annotations
@@ -191,12 +190,8 @@ class EvidenceBundle:
             lines.append(f"- **Duration:** {format_duration(op_duration)}")
         lines.append(f"- **Operator:** {self._operator()}")
         if self._ctx is not None:
-            src = getattr(self._ctx, "source", None)
-            tgt = getattr(self._ctx, "target", None)
             sid = getattr(self._ctx, "sid", None)
             host = getattr(self._ctx, "host", None) or "local"
-            if src or tgt:
-                lines.append(f"- **Copy:** {src or '?'} → {tgt or '?'}")
             if sid:
                 lines.append(f"- **SID:** {sid}")
             lines.append(f"- **Host:** {host}")
@@ -569,7 +564,6 @@ def render_html(bundle_dir: Path | str) -> str:
         ("Sealed", manifest.get("sealed")),
         ("Tool version", manifest.get("tool_version")),
         ("SID", ctx.get("sid")),
-        ("Copy", f"{ctx.get('source') or '?'} → {ctx.get('target') or '?'}"),
         ("Ticket", ctx.get("ticket")),
     ]
     meta_html = "\n".join(

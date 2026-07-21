@@ -82,6 +82,10 @@ class Action(ABC):
     destructive: bool = True
     #: names of checks that MUST pass before this action runs
     requires_checks: list[str] = []
+    #: which cutover macro-phase this action belongs to (drives report grouping)
+    phase: Phase = Phase.UNCLASSIFIED
+    #: explicit, action-oriented report title; falls back to the dotted name.
+    title: str = ""
 
     @abstractmethod
     def dry_run(self, ctx: Context) -> Result:
@@ -118,7 +122,7 @@ class Action(ABC):
         phase_results: list[Result] = []
 
         # Phase 2: dry-run always happens and is shown.
-        dr = self._safe(self.dry_run, ctx, f"{self.name}.dry-run")
+        dr = self._tag(self._safe(self.dry_run, ctx, f"{self.name}.dry-run"))
         phase_results.append(dr)
         if ctx.dry_run:
             return phase_results  # stop here in dry-run mode (the default)
@@ -126,20 +130,30 @@ class Action(ABC):
         # Phase 3: confirmation gate (unless --yes).
         if not ctx.assume_yes:
             phase_results.append(
-                Result.skip(f"{self.name}.execute", "awaiting confirmation (--yes not set)")
+                self._tag(
+                    Result.skip(f"{self.name}.execute", "awaiting confirmation (--yes not set)")
+                )
             )
             return phase_results
 
         # Phase 4: execute.
-        ex = self._safe(self.execute, ctx, f"{self.name}.execute")
+        ex = self._tag(self._safe(self.execute, ctx, f"{self.name}.execute"))
         phase_results.append(ex)
         if ex.status.is_blocking:
             enrich(ex, ctx)
             return phase_results  # do NOT verify a failed execute
 
         # Phase 5: verify.
-        phase_results.append(self._safe(self.verify, ctx, f"{self.name}.verify"))
+        phase_results.append(self._tag(self._safe(self.verify, ctx, f"{self.name}.verify")))
         return phase_results
+
+    def _tag(self, result: Result) -> Result:
+        """Stamp this action's phase/title onto a phase result (if unset)."""
+        if result.phase is Phase.UNCLASSIFIED and self.phase is not Phase.UNCLASSIFIED:
+            result.phase = self.phase
+        if not result.title and self.title:
+            result.title = self.title
+        return result
 
     @staticmethod
     def _safe(fn, ctx: Context, name: str) -> Result:  # type: ignore[no-untyped-def]
