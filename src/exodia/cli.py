@@ -602,14 +602,48 @@ def menu() -> None:
             "\n[yellow]This is a state-changing action.[/] "
             "Dry-run shows the plan without touching anything."
         )
+        # Always show the dry-run plan FIRST so the operator sees the exact
+        # commands (e.g. the CREATE DATABASE ... AS REPLICA OF ... statement)
+        # before deciding whether to run for real.
+        action_cls = registry.get_action(op.name)
+        if action_cls is not None:
+            preview_ctx = build_context(fields, params, execute=False, assume_yes=False)
+            preview = action_cls().dry_run(preview_ctx)
+            console.print(
+                Panel(
+                    (preview.detail or preview.summary or "(no plan produced)"),
+                    title=f"📋 Dry-run plan — {op.name}",
+                    border_style="yellow",
+                )
+            )
+
         execute = prompter.confirm("Execute for real (not just dry-run)?", default=False)
         if execute:
-            assume_yes = prompter.confirm(
-                "Confirm: run the guarded execution now?", default=False
-            )
-            if not assume_yes:
-                console.print("[dim]Staying in dry-run — nothing will be executed.[/]")
-                execute = False
+            # Confirmation gate: for a copy with an explicit target, require the
+            # operator to TYPE the target name — no accidental migration of the
+            # wrong tenant. This is the "is it really this tenant?" safety stop.
+            target_name = fields.get("target") or params.get("target")
+            if target_name:
+                console.print(
+                    f"\n[bold red]You are about to run a state-changing operation "
+                    f"targeting:[/] [bold]{target_name}[/]"
+                )
+                typed = prompter.ask(
+                    f"Type the target name '{target_name}' to confirm", default="", secret=False
+                )
+                if typed.strip() != str(target_name):
+                    console.print(
+                        f"[red]Name mismatch (got {typed.strip()!r}, expected "
+                        f"{target_name!r}) — staying in dry-run, nothing executed.[/]"
+                    )
+                    execute = False
+            if execute:
+                assume_yes = prompter.confirm(
+                    "Confirm: run the guarded execution now?", default=False
+                )
+                if not assume_yes:
+                    console.print("[dim]Staying in dry-run — nothing will be executed.[/]")
+                    execute = False
 
     ctx = build_context(fields, params, execute=execute, assume_yes=assume_yes)
 

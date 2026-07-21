@@ -255,3 +255,47 @@ def test_render_html_escapes_markup(tmp_path) -> None:  # type: ignore[no-untype
     html = render_html(bundle.dir)
     assert "<script>alert(1)</script>" not in html
     assert "&lt;script&gt;" in html
+
+
+def test_render_html_verdict_banner_not_ready(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A bundle with a blocking FAIL renders a red NOT READY banner."""
+    from exodia.core.evidence import render_html
+
+    d = _make_bundle(tmp_path / "evidence")  # has one PASS + one FAIL
+    html = render_html(d)
+    assert "NOT READY" in html
+    assert "#cf222e" in html  # red banner background
+
+
+def test_render_html_verdict_banner_ready(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A bundle where everything passed renders a green READY banner."""
+    from exodia.core.evidence import EvidenceBundle, render_html
+    from exodia.core.result import Result
+
+    root = tmp_path / "evidence"
+    bundle = EvidenceBundle("tenant-copy", None, root=root).open()
+    bundle.add_results([Result.ok("a", "ok"), Result.ok("b", "ok")])
+    bundle.close()
+    html = render_html(bundle.dir)
+    assert "READY" in html
+    assert "#1a7f37" in html  # green banner
+
+
+def test_render_html_banner_ignores_verdict_row(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The synthetic .verdict row must not be double-counted in the banner."""
+    from exodia.core.evidence import EvidenceBundle, render_html
+    from exodia.core.result import Result
+
+    root = tmp_path / "evidence"
+    bundle = EvidenceBundle("tenant-copy", None, root=root).open()
+    bundle.add_results(
+        [
+            Result.ok("a", "ok"),
+            Result.fail("b", "bad"),
+            Result.fail("runbook.verdict", "NOT READY — 1 blocking"),
+        ]
+    )
+    bundle.close()
+    html = render_html(bundle.dir)
+    # one real blocker, not two (the verdict row is excluded)
+    assert "NOT READY — 1 blocking issue(s) must be resolved" in html

@@ -530,6 +530,29 @@ def render_html(bundle_dir: Path | str) -> str:
         f"<dt>{esc(k)}</dt><dd>{esc(v)}</dd>" for k, v in meta if v not in (None, "")
     )
     n_artifacts = len(manifest.get("artifacts", []))
+
+    # Overall verdict banner: scan the results for the worst outcome so a blocker
+    # is impossible to miss when the report is shown to a customer / SES team.
+    # Exclude any synthetic ".verdict" row so blockers aren't double-counted.
+    graded = [
+        r for r in results if not str(r.get("name", "")).endswith(".verdict")
+    ]
+    statuses = [str(r.get("status", "")).lower() for r in graded]
+    n_fail = sum(1 for s in statuses if s in ("fail", "error"))
+    n_warn = sum(1 for s in statuses if s == "warn")
+    n_pass = sum(1 for s in statuses if s == "pass")
+    if n_fail:
+        banner_txt = f"NOT READY — {n_fail} blocking issue(s) must be resolved"
+        banner_bg = "#cf222e"
+    elif n_warn:
+        banner_txt = f"READY WITH CAVEATS — {n_warn} warning(s) to review"
+        banner_bg = "#9a6700"
+    elif n_pass:
+        banner_txt = f"READY — all {n_pass} check(s) passed"
+        banner_bg = "#1a7f37"
+    else:
+        banner_txt = "INCONCLUSIVE — nothing was evaluated"
+        banner_bg = "#57606a"
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -538,6 +561,8 @@ def render_html(bundle_dir: Path | str) -> str:
   body {{ font: 15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; color:#1f2328;
          max-width: 900px; margin: 2rem auto; padding: 0 1rem; }}
   h1 {{ font-size: 1.4rem; border-bottom: 2px solid #d0d7de; padding-bottom:.4rem; }}
+  .verdict {{ color:#fff; padding:.6rem 1rem; border-radius:.5rem; font-weight:700;
+              margin:1rem 0; font-size:1.05rem; }}
   dl {{ display: grid; grid-template-columns: max-content 1fr; gap:.2rem 1rem; }}
   dt {{ font-weight: 600; color:#57606a; }}
   table {{ border-collapse: collapse; width: 100%; margin-top: 1rem; }}
@@ -550,6 +575,7 @@ def render_html(bundle_dir: Path | str) -> str:
   footer {{ margin-top: 2rem; color:#57606a; font-size:.85em; }}
 </style></head><body>
 <h1>Migration evidence — {esc(manifest.get("methodology"))}</h1>
+<div class="verdict" style="background:{banner_bg}">{esc(banner_txt)}</div>
 <dl>{meta_html}</dl>
 <table><thead><tr><th>Check / phase</th><th>Status</th><th>Duration</th><th>Summary</th></tr></thead>
 <tbody>
