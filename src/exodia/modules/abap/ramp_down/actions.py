@@ -25,11 +25,16 @@ string.
 from __future__ import annotations
 
 from exodia.core import Context, Result
-from exodia.core.base import Action
+from exodia.core.base import Action, _truthy
 from exodia.core.params import ParamKind, ParamSpec
 from exodia.core.result import Phase
 
 from ..readiness import _rfc
+
+# Technical/service users that must NOT be locked during ramp-down: locking
+# DDIC/SAP*/TMSADM would break the migration itself (transports, background,
+# system logon). These are always excluded from a business-user lock.
+_PROTECTED_USERS = {"DDIC", "SAP*", "TMSADM", "SAPJSF", "SOLMAN", "EARLYWATCH"}
 
 
 class SuspendBackgroundJobsAction(Action):
@@ -308,7 +313,6 @@ class InformCustomerAction(Action):
 
     def execute(self, ctx: Context) -> Result:
         phase = f"{self.name}.execute"
-        from exodia.core.base import _truthy  # local import (same module)
 
         note = ctx.get("attested_note") or ""
         if not _truthy(ctx.get("attested")):
@@ -327,10 +331,118 @@ class InformCustomerAction(Action):
         )
 
     def verify(self, ctx: Context) -> Result:
-        from exodia.core.base import _truthy
-
         phase = f"{self.name}.verify"
         if _truthy(ctx.get("attested")):
             return Result.ok(phase, "ramp-down completion communicated to the customer",
                              facts={"Attested": "Yes"})
         return Result.skip(phase, "awaiting attestation", facts={"Attested": "No"})
+
+
+def _business_users(ctx: Context) -> list[str]:
+    """Resolve the explicit business-user list from params, excluding protected.
+
+    Users come from the ``business_users`` param (comma-separated). Protected
+    technical users are always removed so a lock can never brick the migration.
+    """
+    raw = ctx.get("business_users") or ""
+    extra_protected = {
+        u.strip().upper() for u in str(ctx.get("keep_unlocked") or "").split(",") if u.strip()
+    }
+    protected = _PROTECTED_USERS | extra_protected
+    users = [u.strip() for u in str(raw).split(",") if u.strip()]
+    return [u for u in users if u.upper() not in protected]
+
+
+class LockBusinessUsersAction(Action):
+    """SU10/BAPI_USER_LOCK — lock business users so no one logs on during copy.
+
+    Protected technical users (DDIC, SAP*, TMSADM, ...) are never locked. The
+    business-user list is provided explicitly via the ``business_users`` param
+    (a comma-separated list); this keeps the action deterministic and auditable
+    rather than locking "everyone" heuristically.
+    """
+
+    name = "abap.rampdown.lock-users"
+    description = "Lock business users for ramp-down (BAPI_USER_LOCK), sparing technical users."
+    title = "SU10 — Lock Business Users (Ramp-Down)"
+    phase = Phase.RAMP_DOWN
+    destructive = True
+    requires_checks: list[str] = []
+
+    def parameters(self) -> list[ParamSpec]:
+        return [
+            *_rfc.SOURCE_CONN_SPECS,
+            ParamSpec(
+                "business_users", "Business users to lock (comma-separated)",
+                help="Explicit list of dialog/business users to lock. Technical "
+                "users (DDIC, SAP*, TMSADM, ...) are always spared.",
+            ),
+            ParamSpec(
+                "keep_unlocked", "Extra users to spare (comma-separated)",
+                help="Additional users to never lock, on top of the built-in "
+                "technical-user exclusions.",
+            ),
+        ]
+
+    def dry_run(self, ctx: Context) -> Result:
+        phase = f"{self.name}.dry-run"
+        if not _rfc.has_connection_params(ctx, _rfc.SOURCE):
+            return Result.skip(phase, "no source RFC connection params")
+        users = _business_users(ctx)
+        if not users:
+            return Result.skip(
+                phase,
+                "no business_users provided to lock (technical users are always spared)",
+            )
+        return Result.ok(
+            phase,
+            f"would lock {len(users)} business user(s): {', '.join(users)} "
+            "(technical users spared)",
+            detail="\n".join(f"  {i}. BAPI_USER_LOCK {u}" for i, u in enumerate(users, start=1)),
+            data={"to_lock": users, "spared": sorted(_PROTECTED_USERS)},
+            facts={"Users To Lock": str(len(users)), "Technical Users": "spared"},
+        )
+
+    def execute(self, ctx: Context) -> Result:
+        phase = f"{self.name}.execute"
+        users = _business_users(ctx)
+        if not users:
+            return Result.skip(phase, "no business_users to lock")
+        try:
+            client = _rfc.get_client(ctx, _rfc.SOURCE)
+            locked: list[str] = []
+            for u in users:
+                res = client.call("BAPI_USER_LOCK", USERNAME=u)
+                ret = res.get("RETURN", {}) or {}
+                msg_type = ret.get("TYPE", "") if isinstance(ret, dict) else ""
+                if str(msg_type).upper() in ("E", "A"):
+                    return Result.fail(
+                        phase,
+                        f"failed to lock user {u} (locked {len(locked)} so far)",
+                        data={"locked": locked, "failed": u, "return": ret},
+                    )
+                locked.append(u)
+        except _rfc.RfcError as exc:
+            return Result.fail(phase, f"could not lock users: {exc}")
+        return Result.ok(
+            phase,
+            f"locked {len(locked)} business user(s); technical users spared",
+            data={"locked": locked, "spared": sorted(_PROTECTED_USERS)},
+            facts={"Users Locked": str(len(locked)), "Technical Users": "spared"},
+        )
+
+    def verify(self, ctx: Context) -> Result:
+        phase = f"{self.name}.verify"
+        users = _business_users(ctx)
+        return Result.ok(
+            phase,
+            f"{len(users)} business user(s) locked for ramp-down",
+            facts={"Users Locked": str(len(users))},
+        )
+
+    def rollback(self, ctx: Context) -> Result:
+        return Result.skip(
+            f"{self.name}.rollback",
+            "unlock the users with abap.post.unlock-users (BAPI_USER_UNLOCK) if "
+            "ramp-down is aborted",
+        )

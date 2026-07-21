@@ -48,6 +48,7 @@ theme:
 nav:
   - Home: index.md
   - HANA Tenant Copy: tenant-copy.md
+  - SAP MIG Cutover: cutover.md
   - Authoring a module: authoring-a-module.md
   - Contributing: contributing.md
   - Changelog: changelog.md

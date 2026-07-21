@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Full cutover lifecycle — ramp-down + post-activities actions.** Completed the
+  four-phase ABAP cutover as guarded actions:
+  - Ramp-Down: `suspend-jobs` (BTCTRNS1), `adapt-operation-modes` (SM63),
+    `lock-users` (SU10/BAPI_USER_LOCK, always sparing DDIC/SAP*/TMSADM/...),
+    `stop-app-servers` (sapcontrol, customer-confirmation gated), and the manual
+    `inform-customer` attestation.
+  - Post-Activities: `start-app-servers` (sapcontrol StartSystem), `resume-jobs`
+    (BTCTRNS2), `unlock-users` (BAPI_USER_UNLOCK), `validate-online` (SM51).
+  New `docs/cutover.md` walks the four phases (Preparation → Ramp-Down →
+  Downtime → Post-Activities) end to end with the exact commands and gates.
 - **Ramp-down actions (SAP MIG).** Guarded state-changing steps to quiesce the
   source before takeover: `abap.rampdown.suspend-jobs` (BTCTRNS1 — suspend the
   background scheduler), `abap.rampdown.adapt-operation-modes` (SM63),

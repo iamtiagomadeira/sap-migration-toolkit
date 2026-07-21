@@ -15,6 +15,7 @@ from exodia.core.shell import CommandResult, Runner
 from exodia.modules.abap.ramp_down.actions import (
     AdaptOperationModesAction,
     InformCustomerAction,
+    LockBusinessUsersAction,
     StopApplicationServersAction,
     SuspendBackgroundJobsAction,
 )
@@ -215,5 +216,57 @@ def test_rampdown_actions_are_ramp_down_phase() -> None:
         AdaptOperationModesAction,
         StopApplicationServersAction,
         InformCustomerAction,
+        LockBusinessUsersAction,
     ):
         assert cls.phase is Phase.RAMP_DOWN
+
+
+# --------------------------------------------------------------------------- #
+# Lock business users (SU10 / BAPI_USER_LOCK)
+# --------------------------------------------------------------------------- #
+
+
+def test_lock_users_spares_technical_users() -> None:
+    ctx = RfcCtx(params={**_SRC, "business_users": "JSMITH,DDIC,TMSADM,MARY"}).bind(
+        lambda fm, kw: {"RETURN": {"TYPE": "S"}}
+    )
+    r = LockBusinessUsersAction().dry_run(ctx)
+    assert r.status is Status.PASS
+    # DDIC + TMSADM must be excluded; only JSMITH + MARY remain
+    assert set(r.data["to_lock"]) == {"JSMITH", "MARY"}
+
+
+def test_lock_users_execute_locks_each() -> None:
+    calls: list[str] = []
+
+    def responder(fm, kw):  # type: ignore[no-untyped-def]
+        calls.append(kw.get("USERNAME", ""))
+        return {"RETURN": {"TYPE": "S"}}
+
+    ctx = RfcCtx(params={**_SRC, "business_users": "JSMITH,MARY"}).bind(responder)
+    r = LockBusinessUsersAction().execute(ctx)
+    assert r.status is Status.PASS
+    assert calls == ["JSMITH", "MARY"]
+    assert r.facts["Users Locked"] == "2"
+
+
+def test_lock_users_execute_fails_on_bapi_error() -> None:
+    ctx = RfcCtx(params={**_SRC, "business_users": "JSMITH"}).bind(
+        lambda fm, kw: {"RETURN": {"TYPE": "E", "MESSAGE": "no such user"}}
+    )
+    r = LockBusinessUsersAction().execute(ctx)
+    assert r.status is Status.FAIL
+
+
+def test_lock_users_skips_without_users() -> None:
+    ctx = RfcCtx(params=_SRC).bind(lambda fm, kw: {})
+    r = LockBusinessUsersAction().execute(ctx)
+    assert r.status is Status.SKIP
+
+
+def test_lock_users_extra_keep_unlocked() -> None:
+    ctx = RfcCtx(
+        params={**_SRC, "business_users": "JSMITH,BATCHUSR", "keep_unlocked": "batchusr"}
+    ).bind(lambda fm, kw: {"RETURN": {"TYPE": "S"}})
+    r = LockBusinessUsersAction().dry_run(ctx)
+    assert r.data["to_lock"] == ["JSMITH"]
