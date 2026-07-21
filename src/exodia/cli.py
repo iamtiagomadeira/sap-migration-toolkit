@@ -12,6 +12,7 @@ from rich.table import Table
 
 from . import __version__
 from .core import report
+from .core.base import Check
 from .core.context import ConfigError, Context
 from .core.evidence import (
     EvidenceBundle,
@@ -271,6 +272,193 @@ def run_runbook_op(
         console.print(f"[dim]📁 evidence: {bundle.dir}[/]")
 
     raise typer.Exit(report.exit_code(results))
+
+
+def _resolve_check_objs(name: str) -> list[Check]:
+    """Resolve a name to an ordered list of check instances.
+
+    Accepts a runbook name (expands to its steps) or a single check name, so
+    ``snapshot`` and ``compare`` work with either. Unknown names raise Exit(2).
+    """
+    rb_cls = registry.get_runbook(name)
+    if rb_cls is not None:
+        objs: list[Check] = []
+        for step in rb_cls().steps:
+            cc = registry.get_check(step)
+            if cc is not None:
+                objs.append(cc())
+        return objs
+    check_cls = registry.get_check(name)
+    if check_cls is not None:
+        return [check_cls()]
+    console.print(f"[red]Unknown check or runbook:[/] {name}. Try `exodia runbooks` / `exodia list`.")
+    raise typer.Exit(2)
+
+
+@app.command("snapshot")
+def snapshot_op(
+    name: str = typer.Argument(..., help="Runbook or check name to capture, e.g. 'tenant-copy.hana.readiness'."),
+    output: str = typer.Option(..., "--output", "-o", help="Path to write the snapshot JSON."),
+    side: str = typer.Option("source", "--side", help="Which side this is: source | target."),
+    label: str | None = typer.Option(None, "--label", help="Human label (defaults to SID/host)."),
+    host: str | None = typer.Option(None, "--host"),
+    user: str | None = typer.Option(None, "--user"),
+    db_type: str | None = typer.Option(None, "--db-type"),
+    source: str | None = typer.Option(None, "--source"),
+    target: str | None = typer.Option(None, "--target"),
+    config: str | None = typer.Option(None, "--config", help="YAML config with connection params."),
+    no_emoji: bool = typer.Option(False, "--no-emoji"),
+) -> None:
+    """Capture one side of a migration into a portable, tamper-evident snapshot.
+
+    Run this WITH ACCESS TO ONE SIDE (e.g. logged on to the customer source).
+    It runs the read-only checks, prints the table, and writes a signed JSON
+    file you carry to the other side for `exodia compare`. Never mutates anything.
+    """
+    from .core.snapshot import Snapshot
+
+    ctx = _build_context(host, user, db_type, source, target, dry_run=True, yes=False, config=config)
+    check_objs = _resolve_check_objs(name)
+
+    bundle = EvidenceBundle(name, ctx, operation=f"snapshot:{side}").open()
+    results = run_checks(check_objs, ctx, evidence=bundle)  # type: ignore[arg-type]
+    bundle.close(results)
+
+    snap = Snapshot.capture(side=side, operation=name, results=results, ctx=ctx, label=label)
+    path = snap.write(output)
+
+    report.render_table(results, f"Snapshot [{side}]: {name}", console, no_emoji=no_emoji)
+    console.print(f"[dim]📁 evidence: {bundle.dir}[/]")
+    console.print(f"[green]📸 snapshot written:[/] {path}  ([dim]carry this to the other side[/])")
+    raise typer.Exit(report.exit_code(results))
+
+
+@app.command("compare")
+def compare_op(
+    snapshot_file: str = typer.Argument(..., help="Path to a snapshot JSON captured on the other side."),
+    against: str | None = typer.Option(
+        None, "--against", help="Runbook/check to capture live on THIS side and compare against."
+    ),
+    with_file: str | None = typer.Option(
+        None, "--with", help="A second snapshot file to compare against (offline diff)."
+    ),
+    side: str = typer.Option("target", "--side", help="Which side THIS is when capturing live."),
+    host: str | None = typer.Option(None, "--host"),
+    user: str | None = typer.Option(None, "--user"),
+    db_type: str | None = typer.Option(None, "--db-type"),
+    source: str | None = typer.Option(None, "--source"),
+    target: str | None = typer.Option(None, "--target"),
+    config: str | None = typer.Option(None, "--config"),
+    as_json: bool = typer.Option(False, "--json"),
+    no_emoji: bool = typer.Option(False, "--no-emoji"),
+) -> None:
+    """Compare a carried-over snapshot against this side — the automated runbook diff.
+
+    Two modes:
+      * live:    `exodia compare source.json --against <runbook> --config tgt.yaml`
+                 captures this side now and diffs it against the file.
+      * offline: `exodia compare source.json --with target.json`
+                 diffs two already-captured snapshots.
+
+    Verifies the incoming snapshot's hash first (tamper-evident), then prints a
+    check-by-check source-vs-target table with an aligned / diverge verdict.
+    """
+    from .core.compare import compare_snapshots
+    from .core.snapshot import Snapshot, verify_snapshot
+
+    problems = verify_snapshot(snapshot_file)
+    if problems:
+        console.print(f"[red]⛔ snapshot verification failed:[/] {snapshot_file}")
+        for p in problems:
+            console.print(f"  • {p}")
+        raise typer.Exit(1)
+    incoming = Snapshot.read(snapshot_file)
+
+    if with_file:
+        other_problems = verify_snapshot(with_file)
+        if other_problems:
+            console.print(f"[red]⛔ second snapshot verification failed:[/] {with_file}")
+            for p in other_problems:
+                console.print(f"  • {p}")
+            raise typer.Exit(1)
+        this_side = Snapshot.read(with_file)
+    elif against:
+        ctx = _build_context(host, user, db_type, source, target, dry_run=True, yes=False, config=config)
+        check_objs = _resolve_check_objs(against)
+        bundle = EvidenceBundle(against, ctx, operation=f"compare-capture:{side}").open()
+        results = run_checks(check_objs, ctx, evidence=bundle)  # type: ignore[arg-type]
+        bundle.close(results)
+        this_side = Snapshot.capture(side=side, operation=against, results=results, ctx=ctx)
+    else:
+        console.print("[red]provide either --against <runbook> (live) or --with <file> (offline).[/]")
+        raise typer.Exit(2)
+
+    # Orient the diff so 'source' is always the source-side snapshot.
+    if incoming.side == "source":
+        rpt = compare_snapshots(incoming, this_side)
+    else:
+        rpt = compare_snapshots(this_side, incoming)
+
+    if as_json:
+        import json as _json
+
+        console.print_json(
+            _json.dumps(
+                {
+                    "operation": rpt.operation,
+                    "source_label": rpt.source_label,
+                    "target_label": rpt.target_label,
+                    "aligned": rpt.aligned,
+                    "rows": [vars(r) for r in rpt.rows],
+                },
+                default=str,
+            )
+        )
+    else:
+        _render_comparison(rpt, no_emoji=no_emoji)
+
+    raise typer.Exit(0 if rpt.aligned else 1)
+
+
+def _render_comparison(rpt: object, *, no_emoji: bool = False) -> None:
+    """Render a ComparisonReport as a source-vs-target table with a verdict."""
+    from .core.compare import ComparisonReport
+
+    assert isinstance(rpt, ComparisonReport)  # nosec B101 - internal call contract
+    icon = {
+        "match": "[OK]" if no_emoji else "✅",
+        "differ": "[DIFF]" if no_emoji else "❌",
+        "source-only": "[SRC]" if no_emoji else "⬅️ ",
+        "target-only": "[TGT]" if no_emoji else "➡️ ",
+        "error": "[ERR]" if no_emoji else "💥",
+    }
+    table = Table(title=f"Compare: {rpt.operation}  ({rpt.source_label} → {rpt.target_label})", expand=True)
+    table.add_column("", width=6 if no_emoji else 3)
+    table.add_column("Check", style="cyan", no_wrap=True)
+    table.add_column("Verdict")
+    table.add_column("Source")
+    table.add_column("Target")
+    table.add_column("Detail")
+    for r in rpt.rows:
+        table.add_row(
+            icon.get(r.verdict, "?"),
+            r.name,
+            r.verdict.upper(),
+            _short(r.source_value),
+            _short(r.target_value),
+            r.detail,
+        )
+    console.print(table)
+    v = rpt.verdict_result()
+    if rpt.aligned:
+        console.print(f"[bold green]✅ SIDES ALIGNED — {v.summary}[/]")
+    else:
+        console.print(f"[bold red]⛔ SIDES DIVERGE — {v.summary}[/]")
+
+
+def _short(value: object) -> str:
+    s = "" if value is None else str(value)
+    return s if len(s) <= 48 else s[:45] + "…"
 
 
 @app.command("doctor")

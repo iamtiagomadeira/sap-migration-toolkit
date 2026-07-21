@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Portable snapshots + cross-side compare** (`exodia snapshot` /
+  `exodia compare`) for air-gapped migrations. Capture one side (source or
+  target) into a signed, tamper-evident JSON file carrying every check's
+  measured facts plus a chain-of-custody header; carry it across the network
+  boundary; then diff it against the other side (live or a second snapshot).
+  Produces a check-by-check source-vs-target table with an aligned/diverge
+  verdict — the consultant's manual runbook, automated. SHA-256 self-hash is
+  verified before any comparison. Exit `0` aligned / `1` diverge.
 - **Runbooks** — an ordered, named bundle of read-only checks that produces a
   single aggregate readiness verdict and a sealed evidence bundle. Discovered
   automatically like checks/actions. New commands `exodia runbook <name>` and

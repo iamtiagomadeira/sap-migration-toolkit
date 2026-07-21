@@ -79,6 +79,18 @@ exodia runbook tenant-copy.hana.readiness --config tenant-copy.yaml
 exodia runbook abap.cutover-readiness --config cutover.yaml
 ```
 
+**Air-gapped migrations** (isolated source and target networks) are handled with
+`snapshot` + `compare`: capture one side into a signed, portable file, carry it
+across, and diff it against the other side — the consultant's manual "read here,
+compare there" runbook, automated and tamper-evident:
+
+```bash
+# with access to the SOURCE (customer):
+exodia snapshot tenant-copy.hana.readiness --side source --config src.yaml -o source.json
+# carry source.json across, then with access to the TARGET (HEC):
+exodia compare source.json --against tenant-copy.hana.readiness --side target --config tgt.yaml
+```
+
 See the [HANA Tenant Copy operator guide](docs/tenant-copy.md) for the full
 readiness → plan → execute → verify workflow.
 

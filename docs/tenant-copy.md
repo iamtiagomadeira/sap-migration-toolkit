@@ -63,12 +63,65 @@ ready. Unknown keys are rejected, so a typo fails loudly at load time.
 
 ## 2. Stage 1 — readiness sweep (read-only, safe)
 
+### 2a. Single-host model (one box reaches both SYSTEMDBs)
+
 ```bash
 exodia runbook tenant-copy.hana.readiness --config tenant-copy.yaml
 ```
 
-Runs the eleven prerequisite checks in dependency order and prints one aggregate
-verdict plus a sealed evidence bundle:
+### 2b. Air-gapped model (isolated source and target networks) — `snapshot` + `compare`
+
+In a real ECS/HEC engagement you usually **cannot** reach both systems from one
+host: the customer source and the HEC target sit in isolated networks. This is
+the manual "read the source, write it in my runbook, then log on to the target
+and compare" loop — and Exodia automates it with two commands.
+
+**On (or with access to) the SOURCE — capture a portable snapshot:**
+
+```bash
+exodia snapshot tenant-copy.hana.readiness \
+    --side source --config source.yaml -o source.json
+```
+
+This runs the read-only checks, writes a **signed, tamper-evident JSON file**
+(`source.json`) containing every check's measured facts (versions, counts,
+statuses, ...) plus a chain-of-custody header, and — like every run — also seals
+a local evidence bundle. It changes nothing.
+
+**Carry `source.json` across the air-gap** (USB, secure transfer, ticket
+attachment — it holds no secrets, only measured facts).
+
+**On (or with access to) the TARGET — compare live:**
+
+```bash
+exodia compare source.json \
+    --against tenant-copy.hana.readiness --side target --config target.yaml
+```
+
+Exodia first **verifies the snapshot's SHA-256** (rejects it if altered in
+transit), captures the target side live, then prints a check-by-check
+**source-vs-target diff** with an aligned / diverge verdict — your runbook table,
+generated automatically:
+
+```
+ Compare: tenant-copy.hana.readiness  (PRD@customer → QAS@hec)
+ ✅  source-tenant-online   MATCH   {'active_status':'YES'}  {'active_status':'YES'}
+ ✅  target-license         MATCH   {'status':'unlimited'}   {'status':'unlimited'}
+ ❌  version-match          DIFFER  {'version':'2.00.067'}   {'version':'2.00.065'}
+ ⛔ SIDES DIVERGE — 1 differing, 0 one-sided of 3 checks
+```
+
+**Offline diff** (two snapshots, neither system reachable now):
+
+```bash
+exodia compare source.json --with target.json
+```
+
+Exit code is automation-friendly: `0` = sides aligned, `1` = they diverge.
+
+### Which checks run
+
+The eleven prerequisite checks, in dependency order:
 
 | Order | Check | What it proves |
 |---|---|---|
