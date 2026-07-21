@@ -225,3 +225,103 @@ def test_mock_actions_are_downtime_phase_and_discovered() -> None:
     ]:
         assert registry.get_action(name) is not None
         assert cls.phase is Phase.DOWNTIME
+
+
+# --------------------------------------------------------------------------- #
+# Post-copy reconnect + cleanup actions
+# --------------------------------------------------------------------------- #
+
+
+def test_reconnect_verify_ok() -> None:
+    from exodia.modules.system_copy.tenant_copy.actions.post_reconnect import (
+        ReconnectVerifyAction,
+    )
+
+    runner = ScriptedRunner(stdout="1")
+    ctx = _ctx(runner, userstore_key="DEFAULT")
+    r = ReconnectVerifyAction().execute(ctx)
+    assert r.status is Status.PASS
+    assert runner.calls[0][0] == "hdbsql"
+    assert ["R3trans", "-x"] in runner.calls
+
+
+def test_reconnect_verify_db_fail() -> None:
+    from exodia.modules.system_copy.tenant_copy.actions.post_reconnect import (
+        ReconnectVerifyAction,
+    )
+
+    runner = ScriptedRunner(exit_code=1, stdout="")
+    ctx = _ctx(runner, userstore_key="DEFAULT")
+    r = ReconnectVerifyAction().execute(ctx)
+    assert r.status is Status.FAIL
+
+
+def test_reconnect_verify_r3trans_warn() -> None:
+    from exodia.modules.system_copy.tenant_copy.actions.post_reconnect import (
+        ReconnectVerifyAction,
+    )
+
+    # DB connect ok, R3trans -x returns non-zero
+    runner = ScriptedRunner(by_sql={"SELECT 1 FROM DUMMY": (0, "1")}, exit_code=12)
+    ctx = _ctx(runner, userstore_key="DEFAULT")
+    r = ReconnectVerifyAction().execute(ctx)
+    assert r.status is Status.WARN
+
+
+def test_delete_abap_dict_data_clears_tables() -> None:
+    from exodia.modules.system_copy.tenant_copy.actions.post_reconnect import (
+        DeleteAbapDictDataAction,
+    )
+
+    runner = ScriptedRunner(stdout="ok")
+    ctx = _ctx(runner, tenant_key="TEN", abap_schema="SAPABAP1")
+    r = DeleteAbapDictDataAction().execute(ctx)
+    assert r.status is Status.PASS
+    sqls = " ".join(c[-1] for c in runner.calls)
+    assert "DELETE FROM SAPABAP1.PAHI" in sqls
+    assert "DELETE FROM SAPABAP1.DDLOG" in sqls
+    assert int(r.facts["Tables Cleared"]) == 12
+
+
+def test_delete_abap_dict_data_skip_without_key() -> None:
+    from exodia.modules.system_copy.tenant_copy.actions.post_reconnect import (
+        DeleteAbapDictDataAction,
+    )
+
+    r = DeleteAbapDictDataAction().execute(_ctx(ScriptedRunner(stdout="ok")))
+    assert r.status is Status.SKIP
+
+
+# --------------------------------------------------------------------------- #
+# Post-copy validation checks
+# --------------------------------------------------------------------------- #
+
+
+def test_secure_communication_on_pass() -> None:
+    ctx = _ctx(ScriptedRunner(stdout='"ON"'), target_userstore_key="TGT")
+    r = _run_check("tenant-copy.hana.secure-communication", ctx)
+    assert r.status is Status.PASS
+    assert r.facts["secure_communication"] == "ON"
+
+
+def test_secure_communication_off_fails() -> None:
+    ctx = _ctx(ScriptedRunner(stdout='"OFF"'), target_userstore_key="TGT")
+    r = _run_check("tenant-copy.hana.secure-communication", ctx)
+    assert r.status is Status.FAIL
+
+
+def test_data_consistency_match_pass() -> None:
+    rows = '"MSEG","1000000"\n"BSEG","900000"'
+    ctx = _ctx(
+        ScriptedRunner(stdout=rows),
+        source_tenant_key="SRC",
+        target_tenant_key="TGT",
+    )
+    r = _run_check("tenant-copy.hana.data-consistency", ctx)
+    assert r.status is Status.PASS
+
+
+def test_data_consistency_skip_without_keys() -> None:
+    ctx = _ctx(ScriptedRunner(stdout=""))
+    r = _run_check("tenant-copy.hana.data-consistency", ctx)
+    assert r.status is Status.SKIP
