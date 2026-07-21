@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Runbooks** — an ordered, named bundle of read-only checks that produces a
+  single aggregate readiness verdict and a sealed evidence bundle. Discovered
+  automatically like checks/actions. New commands `exodia runbook <name>` and
+  `exodia runbooks`. Ships with `tenant-copy.hana.readiness` (the 11 HANA
+  cross-host prerequisites) and `abap.cutover-readiness` (12 read-only SAP MIG
+  ramp-down/parity checks). Runbooks re-read the live system every run — no
+  cached "done" state — so they are idempotent and safe to re-run.
+- **Reinforced tenant-copy verify** — post-copy, `tenant-copy.hana.copy-tenant`
+  now optionally compares object + record counts source vs target (via dedicated
+  tenant hdbuserstore keys): table count must match exactly and total record
+  count must be within a configurable tolerance (default 1%). Upgrades "the
+  tenant is online" to "online AND the data came across". Falls back to the
+  online-only verdict when tenant keys are not provided.
+- HANA tenant-copy operator guide (`docs/tenant-copy.md`) and a ready-to-fill
+  config template (`examples/tenant-copy.yaml`) covering the full
+  readiness → plan → execute → verify workflow with password-free hdbuserstore
+  auth.
 - `exodia report [BUNDLE]` renders an evidence bundle as a standalone,
   shareable HTML document plus its Markdown summary; defaults to the most
   recent bundle and writes outside the sealed directory so the tamper-evident

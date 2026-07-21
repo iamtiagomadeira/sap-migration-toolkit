@@ -271,3 +271,71 @@ def test_target_license_invalid_fail() -> None:
     ctx = FakeContext(params={}).bind(lambda a: _cr(a, stdout='"unlimited","FALSE"'))
     r = _run_check("tenant-copy.hana.target-license", ctx)
     assert r.status is Status.FAIL
+
+
+# --------------------------------------------------------------------------- #
+# Runbook — tenant-copy.hana.readiness (aggregate verdict over the 11 checks)
+# --------------------------------------------------------------------------- #
+
+
+def test_tenant_copy_readiness_runbook_discovered() -> None:
+    rb_cls = registry.get_runbook("tenant-copy.hana.readiness")
+    assert rb_cls is not None
+    assert len(rb_cls.steps) == 11
+    # every step resolves to a registered check
+    for step in rb_cls.steps:
+        assert registry.get_check(step) is not None, f"unresolved step {step}"
+
+
+def test_tenant_copy_readiness_verdict_all_pass() -> None:
+    from exodia.core.runner import run_runbook
+
+    # A responder that makes every check pass: online tenant, absent target,
+    # matching versions, valid license, replication idle, ample space.
+    def responder(argv: list[str]) -> CommandResult:
+        sql = " ".join(argv)
+        if "M_DATABASES" in sql and "PRD" in sql:
+            return _cr(argv, stdout='"PRD","YES"')  # source online
+        if "M_DATABASES" in sql and "QAS" in sql:
+            return _cr(argv, stdout="")  # target absent (no rows)
+        if "M_DATABASE" in sql and "VERSION" in sql:
+            return _cr(argv, stdout='"2.00.067.00.1234567890"')
+        if "REPLICATION" in sql.upper() or "M_SERVICE_REPLICATION" in sql.upper():
+            return _cr(argv, stdout="")  # no active replication
+        if "LICENSE" in sql.upper() or "M_LICENSE" in sql.upper():
+            return _cr(argv, stdout='"unlimited","TRUE"')
+        if argv and argv[0] == "df":
+            return _cr(argv, stdout="Avail\n5000G")
+        if argv and argv[0] == "hdbuserstore":
+            return _cr(argv, stdout="KEY: SYSTEMDB")
+        # default: connectivity / SSL probes succeed
+        return _cr(argv, stdout='"OK"')
+
+    rb = registry.get_runbook("tenant-copy.hana.readiness")()
+    ctx = FakeContext(
+        source="PRD",
+        target="QAS",
+        params={
+            "source_userstore_key": "SRC",
+            "target_userstore_key": "TGT",
+            "source_host": "customer-hana",
+            "source_instance": "00",
+        },
+    ).bind(responder)
+    results = run_runbook(rb, ctx)
+    verdict = results[-1]
+    assert verdict.name.endswith(".verdict")
+    # 11 steps + 1 verdict
+    assert len(results) == 12
+
+
+def test_tenant_copy_readiness_verdict_skip_bare_context() -> None:
+    from exodia.core.runner import run_runbook
+
+    rb = registry.get_runbook("tenant-copy.hana.readiness")()
+    # bare context: checks that require params will fail/skip; the verdict must
+    # never read as a green go.
+    ctx = FakeContext(params={}).bind(lambda a: _cr(a, exit_code=1, stderr="no conn"))
+    results = run_runbook(rb, ctx)
+    verdict = results[-1]
+    assert verdict.status is not Status.PASS

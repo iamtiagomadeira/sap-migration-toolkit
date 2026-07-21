@@ -62,11 +62,25 @@ Prefer a direct command? Every operation is still scriptable by name:
 
 ```bash
 exodia list                              # show all discovered checks & actions
+exodia runbooks                          # show all discovered readiness runbooks
 exodia run core.free-space --config my.yaml
 exodia run backup-restore.prepare --db-type hana --source PRD --target QAS
 exodia run backup-restore.restore-db --db-type hana --execute --yes
 exodia doctor                            # self-check
 ```
+
+A **runbook** bundles a set of read-only checks into one ordered sweep with a
+single aggregate verdict and a sealed evidence bundle — the fastest way to
+answer "is this system ready?". It re-reads the live system every run (no cached
+state), so it is safe to re-run as often as you like:
+
+```bash
+exodia runbook tenant-copy.hana.readiness --config tenant-copy.yaml
+exodia runbook abap.cutover-readiness --config cutover.yaml
+```
+
+See the [HANA Tenant Copy operator guide](docs/tenant-copy.md) for the full
+readiness → plan → execute → verify workflow.
 
 Dry-run is the default for actions. Pass `--execute --yes` to actually run (the
 wizard asks you to confirm both, so nothing runs by accident).

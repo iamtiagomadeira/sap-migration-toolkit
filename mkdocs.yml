@@ -47,6 +47,7 @@ theme:
 
 nav:
   - Home: index.md
+  - HANA Tenant Copy: tenant-copy.md
   - Authoring a module: authoring-a-module.md
   - Contributing: contributing.md
   - Changelog: changelog.md

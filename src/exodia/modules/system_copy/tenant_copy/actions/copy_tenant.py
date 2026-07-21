@@ -79,6 +79,19 @@ class TenantCopyAction(Action):
                 "log_backup_path", "Backup log path (backup method)",
                 help="Path to the source log backups; defaults to the data path.",
             ),
+            # Post-copy data-integrity verification (optional but recommended).
+            # These connect directly to the TENANTS (not the SYSTEMDBs) so verify
+            # can compare object + record counts source vs target after the copy.
+            ParamSpec(
+                "source_tenant_key", "Source tenant hdbuserstore key (verify)",
+                help="hdbsql -U key connecting to the SOURCE tenant itself "
+                "(not SYSTEMDB). Enables post-copy row-count comparison.",
+            ),
+            ParamSpec(
+                "target_tenant_key", "Target tenant hdbuserstore key (verify)",
+                help="hdbsql -U key connecting to the newly-created TARGET tenant. "
+                "Enables post-copy row-count comparison.",
+            ),
         ]
 
     # --- parameter resolution -------------------------------------------------
@@ -228,10 +241,109 @@ class TenantCopyAction(Action):
                 "(replication may still be syncing)",
                 detail=cr.stdout,
             )
+
+        # Online is necessary but not sufficient. When tenant-level keys are
+        # provided, compare object + record counts source vs target so "online"
+        # is upgraded to "online AND the data actually came across".
+        integrity = self._verify_data_integrity(ctx, phase, tgt)
+        if integrity is not None:
+            return integrity
         return Result.ok(
             phase,
-            f"target tenant '{tgt}' is online (copy verified)",
+            f"target tenant '{tgt}' is online (copy verified; data-integrity "
+            "comparison skipped — set source_tenant_key + target_tenant_key to enable)",
             data={"target_tenant": tgt, "stdout": cr.stdout.strip()},
+        )
+
+    # --- post-copy data-integrity comparison ---------------------------------
+
+    @staticmethod
+    def _tenant_counts(ctx: Context, tenant_key: str, timeout: int) -> tuple[int, int] | None:
+        """Return (table_count, total_record_count) for a tenant, or None on error.
+
+        Queries M_TABLES on the tenant itself (not SYSTEMDB): the number of
+        tables and the summed RECORD_COUNT give a cheap, deterministic fingerprint
+        of the copied data set. Read-only.
+        """
+        sql = (
+            "SELECT COUNT(*), COALESCE(SUM(RECORD_COUNT), 0) FROM M_TABLES "
+            "WHERE SCHEMA_NAME NOT LIKE '\\_SYS%' ESCAPE '\\'"
+        )
+        cr = ctx.runner().run(
+            ["hdbsql", "-U", tenant_key, "-x", "-a", "-j", sql], timeout=timeout
+        )
+        if not cr.ok:
+            return None
+        rows = c.parse_hdbsql_rows(cr.stdout)
+        if not rows or len(rows[0]) < 2:
+            return None
+        try:
+            return int(rows[0][0]), int(rows[0][1])
+        except (ValueError, IndexError):
+            return None
+
+    def _verify_data_integrity(
+        self, ctx: Context, phase: str, tgt: str
+    ) -> Result | None:
+        """Compare source vs target tenant counts. None = comparison not attempted.
+
+        Returns a Result (PASS/WARN/FAIL) when both tenant keys are supplied and
+        a comparison could be made; returns None when the comparison is skipped
+        (no keys) so the caller falls back to the plain online verdict.
+        """
+        src_key = ctx.get("source_tenant_key")
+        tgt_key = ctx.get("target_tenant_key")
+        if not src_key or not tgt_key:
+            return None
+        timeout = int(ctx.get("verify_timeout", 120))
+        src = self._tenant_counts(ctx, str(src_key), timeout)
+        tgt_counts = self._tenant_counts(ctx, str(tgt_key), timeout)
+        if src is None or tgt_counts is None:
+            side = "source" if src is None else "target"
+            return Result.warn(
+                phase,
+                f"target tenant '{tgt}' is online, but could not read {side} "
+                "tenant counts for the data-integrity comparison",
+                data={"source_counts": src, "target_counts": tgt_counts},
+            )
+        src_tables, src_records = src
+        tgt_tables, tgt_records = tgt_counts
+        # Record counts on column tables are approximate (delta/main, pending
+        # merges), so allow a small tolerance; table count must match exactly.
+        tol = float(ctx.get("verify_record_tolerance", 0.01))
+        record_delta = abs(src_records - tgt_records)
+        record_drift = (record_delta / src_records) if src_records else 0.0
+        data = {
+            "target_tenant": tgt,
+            "source_tables": src_tables,
+            "target_tables": tgt_tables,
+            "source_records": src_records,
+            "target_records": tgt_records,
+            "record_drift": round(record_drift, 4),
+            "tolerance": tol,
+        }
+        if tgt_tables != src_tables:
+            return Result.fail(
+                phase,
+                f"data-integrity FAIL: table count differs "
+                f"(source={src_tables}, target={tgt_tables}) — copy incomplete",
+                data=data,
+                sap_note="2101244",
+            )
+        if record_drift > tol:
+            return Result.fail(
+                phase,
+                f"data-integrity FAIL: record count drift {record_drift:.2%} "
+                f"exceeds tolerance {tol:.2%} "
+                f"(source={src_records}, target={tgt_records})",
+                data=data,
+                sap_note="2101244",
+            )
+        return Result.ok(
+            phase,
+            f"target tenant '{tgt}' online and data verified: {tgt_tables} tables, "
+            f"{tgt_records} records (drift {record_drift:.2%} within {tol:.2%})",
+            data=data,
         )
 
     def rollback(self, ctx: Context) -> Result:

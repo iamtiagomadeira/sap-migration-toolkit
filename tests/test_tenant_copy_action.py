@@ -280,6 +280,164 @@ def test_rollback_documented_only() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Reinforced verify: post-copy data-integrity comparison (source vs target)
+# --------------------------------------------------------------------------- #
+
+
+class ScriptedRunner(Runner):
+    """Runner that replays a canned result based on a substring of the SQL argv.
+
+    verify() issues up to three queries: the M_DATABASES online check, then a
+    source M_TABLES count and a target M_TABLES count. This picks the response
+    by matching against the userstore key (-U <KEY>) and/or the SQL text.
+    """
+
+    def __init__(self, by_key: dict[str, tuple[int, str]], default: tuple[int, str] = (0, "")):
+        self.calls: list[list[str]] = []
+        self._by_key = by_key
+        self._default = default
+
+    def run(
+        self, argv: list[str], timeout: int = 300, input_text: str | None = None
+    ) -> CommandResult:
+        self.calls.append(argv)
+        key = argv[argv.index("-U") + 1] if "-U" in argv else ""
+        sql = argv[-1]
+        # M_DATABASES online check uses the SYSTEMDB/target key; M_TABLES counts
+        # use the dedicated tenant keys. Disambiguate by SQL when keys collide.
+        for needle, (code, out) in self._by_key.items():
+            if needle in key or needle in sql:
+                return CommandResult(argv, code, out, "")
+        code, out = self._default
+        return CommandResult(argv, code, out, "")
+
+
+def test_verify_data_integrity_pass() -> None:
+    # online YES, source and target counts match exactly
+    runner = ScriptedRunner(
+        by_key={
+            "M_DATABASES": (0, '"QAS","YES"'),
+            "SRCTEN": (0, '"1500","2000000"'),
+            "TGTTEN": (0, '"1500","2000000"'),
+        }
+    )
+    ctx = _ctx(
+        runner,
+        target="QAS",
+        params={
+            "target_userstore_key": "TGT",
+            "source_tenant_key": "SRCTEN",
+            "target_tenant_key": "TGTTEN",
+        },
+    )
+    r = TenantCopyAction().verify(ctx)
+    assert r.status is Status.PASS
+    assert r.data["source_tables"] == 1500
+    assert r.data["target_records"] == 2000000
+    assert "data verified" in r.summary
+
+
+def test_verify_data_integrity_within_tolerance_pass() -> None:
+    # 0.5% record drift, default tolerance 1% => PASS
+    runner = ScriptedRunner(
+        by_key={
+            "M_DATABASES": (0, '"QAS","YES"'),
+            "SRCTEN": (0, '"1500","1000000"'),
+            "TGTTEN": (0, '"1500","995000"'),
+        }
+    )
+    ctx = _ctx(
+        runner,
+        target="QAS",
+        params={
+            "target_userstore_key": "TGT",
+            "source_tenant_key": "SRCTEN",
+            "target_tenant_key": "TGTTEN",
+        },
+    )
+    r = TenantCopyAction().verify(ctx)
+    assert r.status is Status.PASS
+
+
+def test_verify_data_integrity_table_mismatch_fails() -> None:
+    runner = ScriptedRunner(
+        by_key={
+            "M_DATABASES": (0, '"QAS","YES"'),
+            "SRCTEN": (0, '"1500","2000000"'),
+            "TGTTEN": (0, '"1490","2000000"'),
+        }
+    )
+    ctx = _ctx(
+        runner,
+        target="QAS",
+        params={
+            "target_userstore_key": "TGT",
+            "source_tenant_key": "SRCTEN",
+            "target_tenant_key": "TGTTEN",
+        },
+    )
+    r = TenantCopyAction().verify(ctx)
+    assert r.status is Status.FAIL
+    assert "table count differs" in r.summary
+
+
+def test_verify_data_integrity_record_drift_fails() -> None:
+    # 10% record drift, default tolerance 1% => FAIL
+    runner = ScriptedRunner(
+        by_key={
+            "M_DATABASES": (0, '"QAS","YES"'),
+            "SRCTEN": (0, '"1500","1000000"'),
+            "TGTTEN": (0, '"1500","900000"'),
+        }
+    )
+    ctx = _ctx(
+        runner,
+        target="QAS",
+        params={
+            "target_userstore_key": "TGT",
+            "source_tenant_key": "SRCTEN",
+            "target_tenant_key": "TGTTEN",
+        },
+    )
+    r = TenantCopyAction().verify(ctx)
+    assert r.status is Status.FAIL
+    assert "drift" in r.summary
+
+
+def test_verify_skips_integrity_without_tenant_keys() -> None:
+    # No tenant keys => falls back to plain online verdict (backwards compatible)
+    runner = FakeRunner(exit_code=0, stdout='"QAS","YES"')
+    ctx = _ctx(runner, target="QAS", params={"target_userstore_key": "TGT"})
+    r = TenantCopyAction().verify(ctx)
+    assert r.status is Status.PASS
+    assert "comparison skipped" in r.summary
+    # only the online check ran — no tenant-count queries
+    assert len(runner.calls) == 1
+
+
+def test_verify_integrity_warns_when_counts_unreadable() -> None:
+    # online YES but source count query errors => WARN, not a false PASS
+    runner = ScriptedRunner(
+        by_key={
+            "M_DATABASES": (0, '"QAS","YES"'),
+            "SRCTEN": (1, ""),
+            "TGTTEN": (0, '"1500","2000000"'),
+        }
+    )
+    ctx = _ctx(
+        runner,
+        target="QAS",
+        params={
+            "target_userstore_key": "TGT",
+            "source_tenant_key": "SRCTEN",
+            "target_tenant_key": "TGTTEN",
+        },
+    )
+    r = TenantCopyAction().verify(ctx)
+    assert r.status is Status.WARN
+
+
+# --------------------------------------------------------------------------- #
 # End-to-end via run_action: blocking precheck aborts before execute
 # --------------------------------------------------------------------------- #
 

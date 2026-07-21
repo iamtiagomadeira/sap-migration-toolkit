@@ -1,0 +1,78 @@
+# Exodia — HANA cross-host tenant-copy configuration template
+#
+# Copy this file, fill in your values, and run:
+#
+#   # 1. read-only readiness sweep (safe, run as often as you like)
+#   exodia runbook tenant-copy.hana.readiness --config tenant-copy.yaml
+#
+#   # 2. plan the copy without touching anything (dry-run is the DEFAULT)
+#   exodia run tenant-copy.hana.copy-tenant --config tenant-copy.yaml
+#
+#   # 3. execute for real (only when the readiness verdict is green)
+#   exodia run tenant-copy.hana.copy-tenant --config tenant-copy.yaml --execute --yes
+#
+# Unknown keys are REJECTED (a typo fails loudly). All values are validated.
+# NO PASSWORDS live here: hdbsql authenticates through the HANA secure user
+# store (hdbuserstore), so this file only ever names the *keys*, never secrets.
+
+# --- Where Exodia runs ------------------------------------------------------
+# Leave host unset to run on the machine that can reach both SYSTEMDBs
+# (typically a jump host). When set, `user` is required and SSH key-based auth
+# is used (no passwords).
+# host: jumphost.hec.example.com
+# user: mig-operator
+# key_filename: ~/.ssh/id_ed25519
+# known_hosts: ~/.ssh/known_hosts
+
+db_type: hana
+
+# --- Tenant identity --------------------------------------------------------
+# source: the customer tenant to copy FROM (read-only; never mutated).
+# target: the NEW tenant to create on the HEC target (must not already exist).
+source: PRD
+target: QAS
+
+# --- hdbuserstore keys for the two SYSTEMDBs --------------------------------
+# Created beforehand on the box that runs Exodia, e.g.:
+#   hdbuserstore SET SRCSYS  <src_host>:3<nn>13  SYSTEM  <pwd>
+#   hdbuserstore SET TGTSYS  <tgt_host>:3<mm>13  SYSTEM  <pwd>
+# (the SET command is where the password is entered — once, into the secure
+#  store — and it never appears here or on any Exodia command line.)
+params:
+  source_userstore_key: SRCSYS
+  target_userstore_key: TGTSYS
+
+  # --- Cross-host replication endpoint (replication method) -----------------
+  # The customer HANA host the target connects to, and its instance number
+  # (the source SQL port 3<nn>13 is derived from it).
+  source_host: customer-hana.example.com
+  source_instance: "00"
+
+  # copy_method: replication (default, low-downtime) | backup (recover a set)
+  copy_method: replication
+
+  # --- Backup method inputs (only if copy_method: backup) -------------------
+  # catalog_path: /hana/shared/backup/PRD/catalog
+  # data_path:    /hana/shared/backup/PRD/data
+  # log_backup_path: /hana/shared/backup/PRD/log
+
+  # --- Post-copy data-integrity verification (recommended) ------------------
+  # Extra hdbuserstore keys that connect to the TENANTS THEMSELVES (not the
+  # SYSTEMDBs), so `verify` compares table + record counts source vs target
+  # after the copy. Omit them to fall back to the plain "tenant is online"
+  # verdict. Create them like:
+  #   hdbuserstore SET SRCTEN  <src_host>:3<nn>15@PRD  <user>  <pwd>
+  #   hdbuserstore SET TGTTEN  <tgt_host>:3<mm>15@QAS  <user>  <pwd>
+  source_tenant_key: SRCTEN
+  target_tenant_key: TGTTEN
+
+  # record-count drift allowed before verify FAILs (default 0.01 = 1%).
+  # Column-store row counts wobble with delta/main merges, so a small
+  # tolerance is normal; the table COUNT must always match exactly.
+  verify_record_tolerance: "0.01"
+
+  # capacity sizing hint (GB) — helps the target-data-space check size headroom
+  # source_tenant_gb: "800"
+
+# dry_run defaults to true: NOTHING executes unless you pass --execute.
+dry_run: true
