@@ -17,6 +17,7 @@ from exodia.core.menu import (
     methodologies,
     methodologies_in_family,
     params_for_checks,
+    runbooks_in,
     spec_for,
     stack_blocks,
 )
@@ -197,6 +198,32 @@ def test_params_for_checks_unions_and_dedupes() -> None:
 
 def test_params_for_checks_empty_when_no_checks() -> None:
     assert params_for_checks([], registry) == []
+
+
+# --------------------------------------------------------------------------- #
+# Runbooks surfaced per methodology in the menu
+# --------------------------------------------------------------------------- #
+
+
+def test_runbooks_in_returns_methodology_sweeps() -> None:
+    rbs = runbooks_in(registry, "tenant-copy")
+    names = {name for name, _desc, _steps in rbs}
+    # the side-scoped readiness sweeps must be offered for tenant-copy
+    assert "tenant-copy.hana.readiness-source" in names
+    assert "tenant-copy.hana.readiness-target" in names
+    # each entry carries a positive step count
+    assert all(steps > 0 for _n, _d, steps in rbs)
+
+
+def test_runbooks_in_excludes_other_methodologies() -> None:
+    rbs = runbooks_in(registry, "tenant-copy")
+    names = {name for name, _desc, _steps in rbs}
+    # abap runbooks must not leak into tenant-copy
+    assert not any(n.startswith("abap.") for n in names)
+
+
+def test_runbooks_in_empty_for_methodology_without_runbooks() -> None:
+    assert runbooks_in(registry, "pipo") == []
 
 
 # --------------------------------------------------------------------------- #

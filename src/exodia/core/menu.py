@@ -233,6 +233,21 @@ def checks_in(ops: list[Operation], methodology: str) -> list[Operation]:
     return [o for o in ops if o.methodology == methodology and o.kind == "check"]
 
 
+def runbooks_in(registry: Registry, methodology: str) -> list[tuple[str, str, int]]:
+    """Runbooks whose name belongs to a methodology, as (name, description, steps).
+
+    A runbook belongs to the methodology when its dotted name starts with the
+    methodology segment (e.g. ``tenant-copy.hana.readiness-source`` ->
+    ``tenant-copy``). Sorted by name for a stable menu. This lets the wizard
+    offer one-click "run this whole readiness sweep" entries per side/phase.
+    """
+    out: list[tuple[str, str, int]] = []
+    for name, rb_cls in registry.runbooks().items():
+        if _methodology(name) == methodology:
+            out.append((name, rb_cls.description, len(rb_cls.steps)))
+    return sorted(out, key=lambda t: t[0])
+
+
 def params_for_checks(
     check_ops: list[Operation], registry: Registry
 ) -> list[ParamSpec]:

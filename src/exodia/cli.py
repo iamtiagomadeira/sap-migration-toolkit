@@ -35,6 +35,7 @@ from .core.menu import (
     methodologies_in_family,
     params_for_checks,
     pretty,
+    runbooks_in,
     spec_for,
     stack_blocks,
 )
@@ -742,17 +743,31 @@ def menu() -> None:
         )
         raise typer.Exit(2)
 
-    # Step 3: operation within the methodology (checks first — they're safe)
+    # Step 3: operation within the methodology. Menu order:
+    #   0            -> Run ALL pre-checks (combined)
+    #   1..R         -> readiness sweeps (runbooks) for this methodology, if any
+    #   R+1..        -> individual checks (safe) then actions
     group_ops = [o for o in ops if o.methodology == methodology]
     group_checks = checks_in(ops, methodology)
+    group_runbooks = runbooks_in(registry, methodology)
     run_all_label = (
         f"✅ Run ALL {len(group_checks)} pre-checks in this methodology"
     )
-    op_labels = [run_all_label] + [
-        f"{'🔍' if o.kind == 'check' else '⚙️ '} {o.name}  —  {o.description}"
-        for o in group_ops
+    runbook_labels = [
+        f"📋 {name}  —  {desc}  ({steps} checks)"
+        for (name, desc, steps) in group_runbooks
     ]
+    op_labels = (
+        [run_all_label]
+        + runbook_labels
+        + [
+            f"{'🔍' if o.kind == 'check' else '⚙️ '} {o.name}  —  {o.description}"
+            for o in group_ops
+        ]
+    )
     sel = prompter.choose(f"[{pretty(methodology)}] Select an operation", op_labels)
+
+    n_rb = len(group_runbooks)
 
     # "Run all pre-checks" is offered as index 0 when the methodology has checks.
     if sel == 0 and group_checks:
@@ -778,7 +793,28 @@ def menu() -> None:
         console.print(f"[dim]📁 evidence: {bundle.dir}[/]")
         raise typer.Exit(report.exit_code(results))
 
-    op: Operation = group_ops[sel - 1]
+    # A readiness sweep (runbook) was picked: indices 1..n_rb.
+    if 1 <= sel <= n_rb:
+        rb_name = group_runbooks[sel - 1][0]
+        rb_cls = registry.get_runbook(rb_name)
+        assert rb_cls is not None  # nosec B101 - from discovery
+        runbook = rb_cls()
+        specs = runbook.parameters()
+        console.print(
+            f"\n[bold]Configure:[/] {rb_name} "
+            f"({len(runbook.steps)} checks — answer the combined fields once)"
+        )
+        fields, params = collect_params(specs, prompter)
+        params.setdefault("stack", stack)
+        ctx = build_context(fields, params, execute=False, assume_yes=False)
+        bundle = EvidenceBundle(rb_name, ctx, operation="runbook").open()
+        results = run_runbook(runbook, ctx, evidence=bundle)
+        bundle.close(results)
+        report.render_table(results, f"Runbook: {rb_name}", console)
+        console.print(f"[dim]📁 evidence: {bundle.dir}[/]")
+        raise typer.Exit(report.exit_code(results))
+
+    op: Operation = group_ops[sel - 1 - n_rb]
 
     # Step 3: collect declared parameters
     specs = spec_for(op, registry)
