@@ -97,6 +97,11 @@ def test_all_abap_readiness_checks_discovered() -> None:
         "abap.readiness.component-versions",
         "abap.readiness.update-queues-drained",
         "abap.readiness.app-servers",
+        "abap.readiness.client-settings",
+        "abap.readiness.background-jobs",
+        "abap.readiness.rfc-destinations",
+        "abap.readiness.transport-requests",
+        "abap.readiness.lock-entries",
     }
     assert expected <= set(checks)
 
@@ -277,6 +282,146 @@ def test_app_servers_no_servers_warns() -> None:
 
     ctx = FakeContext(params=_SRC).bind(responder)
     assert _run_check("abap.readiness.app-servers", ctx).status is Status.WARN
+
+
+# --------------------------------------------------------------------------- #
+# client-settings (SCC4 / T000)
+# --------------------------------------------------------------------------- #
+
+
+def test_client_settings_locked_pass() -> None:
+    rows = [
+        {"MANDT": "100", "MTEXT": "Prod", "CCCATEGORY": "P", "CCCORACTIV": "3", "CCNOCLIIND": "3"},
+        {"MANDT": "000", "MTEXT": "SAP", "CCCATEGORY": "C", "CCCORACTIV": "1", "CCNOCLIIND": "1"},
+    ]
+    ctx = FakeContext(params=_SRC).bind(lambda fm, kw: _read_table_rows(rows))
+    r = _run_check("abap.readiness.client-settings", ctx)
+    assert r.status is Status.PASS
+    assert r.data["productive_open_for_changes"] == []
+
+
+def test_client_settings_productive_open_warns() -> None:
+    rows = [
+        {"MANDT": "100", "MTEXT": "Prod", "CCCATEGORY": "P", "CCCORACTIV": "1", "CCNOCLIIND": "1"},
+    ]
+    ctx = FakeContext(params=_SRC).bind(lambda fm, kw: _read_table_rows(rows))
+    r = _run_check("abap.readiness.client-settings", ctx)
+    assert r.status is Status.WARN
+    assert r.data["productive_open_for_changes"] == ["100"]
+
+
+# --------------------------------------------------------------------------- #
+# background-jobs (SM37 / TBTCO)
+# --------------------------------------------------------------------------- #
+
+
+def test_background_jobs_clean_pass() -> None:
+    rows = [
+        {"JOBNAME": "OLD_JOB", "JOBCOUNT": "1", "STATUS": "F"},
+        {"JOBNAME": "CANCELLED", "JOBCOUNT": "2", "STATUS": "A"},
+    ]
+    ctx = FakeContext(params=_SRC).bind(lambda fm, kw: _read_table_rows(rows))
+    r = _run_check("abap.readiness.background-jobs", ctx)
+    assert r.status is Status.PASS
+
+
+def test_background_jobs_active_fails() -> None:
+    rows = [{"JOBNAME": "RUNNING_NOW", "JOBCOUNT": "9", "STATUS": "R"}]
+    ctx = FakeContext(params=_SRC).bind(lambda fm, kw: _read_table_rows(rows))
+    r = _run_check("abap.readiness.background-jobs", ctx)
+    assert r.status is Status.FAIL
+    assert r.data["active_count"] == 1
+
+
+def test_background_jobs_ready_warns() -> None:
+    rows = [{"JOBNAME": "SCHEDULED", "JOBCOUNT": "3", "STATUS": "Y"}]
+    ctx = FakeContext(params=_SRC).bind(lambda fm, kw: _read_table_rows(rows))
+    r = _run_check("abap.readiness.background-jobs", ctx)
+    assert r.status is Status.WARN
+    assert r.data["ready_count"] == 1
+
+
+def test_background_jobs_is_blocking() -> None:
+    cls = registry.get_check("abap.readiness.background-jobs")
+    assert cls is not None
+    assert cls.blocking is True
+
+
+# --------------------------------------------------------------------------- #
+# rfc-destinations (SM59 / RFCDES)
+# --------------------------------------------------------------------------- #
+
+
+def test_rfc_destinations_inventory_pass() -> None:
+    rows = [
+        {"RFCDEST": "SAP_PRD_001", "RFCTYPE": "3"},
+        {"RFCDEST": "EXT_PAYROLL", "RFCTYPE": "T"},
+        {"RFCDEST": "LOGICAL_A", "RFCTYPE": "L"},
+    ]
+    ctx = FakeContext(params=_SRC).bind(lambda fm, kw: _read_table_rows(rows))
+    r = _run_check("abap.readiness.rfc-destinations", ctx)
+    assert r.status is Status.PASS
+    assert r.data["total"] == 3
+    assert r.data["abap_and_external"] == 2
+
+
+def test_rfc_destinations_empty_warns() -> None:
+    ctx = FakeContext(params=_SRC).bind(lambda fm, kw: _read_table_rows([]))
+    r = _run_check("abap.readiness.rfc-destinations", ctx)
+    assert r.status is Status.WARN
+
+
+# --------------------------------------------------------------------------- #
+# transport-requests (STMS / E070)
+# --------------------------------------------------------------------------- #
+
+
+def test_transport_requests_all_released_pass() -> None:
+    rows = [
+        {"TRKORR": "DEVK900001", "TRFUNCTION": "K", "TRSTATUS": "R"},
+        {"TRKORR": "DEVK900002", "TRFUNCTION": "W", "TRSTATUS": "R"},
+    ]
+    ctx = FakeContext(params=_SRC).bind(lambda fm, kw: _read_table_rows(rows))
+    r = _run_check("abap.readiness.transport-requests", ctx)
+    assert r.status is Status.PASS
+
+
+def test_transport_requests_modifiable_warns() -> None:
+    rows = [
+        {"TRKORR": "DEVK900003", "TRFUNCTION": "K", "TRSTATUS": "D"},
+        {"TRKORR": "DEVK900004", "TRFUNCTION": "W", "TRSTATUS": "L"},
+        {"TRKORR": "DEVK900005", "TRFUNCTION": "K", "TRSTATUS": "R"},
+    ]
+    ctx = FakeContext(params=_SRC).bind(lambda fm, kw: _read_table_rows(rows))
+    r = _run_check("abap.readiness.transport-requests", ctx)
+    assert r.status is Status.WARN
+    assert r.data["modifiable_count"] == 2
+
+
+# --------------------------------------------------------------------------- #
+# lock-entries (SM12 / ENQUEUE_READ)
+# --------------------------------------------------------------------------- #
+
+
+def test_lock_entries_none_pass() -> None:
+    ctx = FakeContext(params=_SRC).bind(lambda fm, kw: {"ENQ": [], "SUBRC": 0})
+    r = _run_check("abap.readiness.lock-entries", ctx)
+    assert r.status is Status.PASS
+    assert r.data["lock_count"] == 0
+
+
+def test_lock_entries_held_fails() -> None:
+    resp = {"ENQ": [{"GUNAME": "USER1"}, {"GUNAME": "USER2"}], "SUBRC": 0}
+    ctx = FakeContext(params=_SRC).bind(lambda fm, kw: resp)
+    r = _run_check("abap.readiness.lock-entries", ctx)
+    assert r.status is Status.FAIL
+    assert r.data["holders"] == ["USER1", "USER2"]
+
+
+def test_lock_entries_is_blocking() -> None:
+    cls = registry.get_check("abap.readiness.lock-entries")
+    assert cls is not None
+    assert cls.blocking is True
 
 
 # --------------------------------------------------------------------------- #
