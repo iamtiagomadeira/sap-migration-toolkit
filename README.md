@@ -4,146 +4,172 @@
   <a href="https://github.com/iamtiagomadeira/sap-migration-toolkit/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/iamtiagomadeira/sap-migration-toolkit/actions/workflows/ci.yml/badge.svg" /></a>
   <a href="https://github.com/iamtiagomadeira/sap-migration-toolkit/actions/workflows/codeql.yml"><img alt="CodeQL" src="https://github.com/iamtiagomadeira/sap-migration-toolkit/actions/workflows/codeql.yml/badge.svg" /></a>
   <img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-blue" />
+  <img alt="Tests" src="https://img.shields.io/badge/tests-551%20passing-brightgreen" />
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green" /></a>
-  <a href="CONTRIBUTING.md"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen" /></a>
+  <a href="https://iamtiagomadeira.github.io/sap-migration-toolkit/"><img alt="Docs" src="https://img.shields.io/badge/docs-online-blue" /></a>
 </p>
 
-> _Codename: Exodia_ — Stateless executor for SAP migration operations — checks & actions for HANA/ASE
-> backup-restore, tenant copy, HANA System Replication (HSR), and Java (AS Java) system copy.
+> _Codename: Exodia_ — a stateless, plugable command-line tool that automates the
+> repetitive, error-prone parts of **SAP system migrations**: HANA tenant copy,
+> backup/restore, HANA System Replication, and the ABAP cutover (ramp-down →
+> downtime → post-activities).
 
-SAP Migration Toolkit is a lightweight, plugable command-line tool that automates the repetitive,
-error-prone parts of SAP system migrations. It runs on any Linux server, needs no
-database of its own, and never phones home. Think of it as `ansible --check` meets
-a SAP Basis runbook: it validates prerequisites, then executes migration steps with
-dry-run, confirmation, verification, and documented rollback.
+Think **`ansible --check` meets a SAP Basis runbook**: Exodia validates
+prerequisites, then executes migration steps with dry-run, explicit confirmation,
+verification, documented rollback — and a sealed, tamper-evident audit trail for
+every run. It runs on any Linux box, needs no database of its own, and never
+phones home.
+
+📖 **[Read the docs →](https://iamtiagomadeira.github.io/sap-migration-toolkit/)**
+
+---
 
 ## Why
 
-SAP migrations (backup/restore, tenant copy, HSR setup, Java system copy) are
-largely manual today — consultants babysit `sapinst` screens for hours and run
-prerequisite checks by hand. Exodia turns that into repeatable, monitored, auditable
-automation while keeping the human in control for the decisions that matter.
+An SAP system copy today is largely manual: a consultant babysits `sapinst`
+screens for hours, runs prerequisite checks by hand across a dozen transactions
+and two SYSTEMDBs, and pastes screenshots into a handover document. It is slow,
+inconsistent, and hard to audit.
+
+Exodia turns that runbook into **repeatable, monitored, auditable automation**,
+while keeping the human in control for the decisions that matter. It models a
+real ECS/HEC cutover as first-class objects: read-only **checks**, guarded
+**actions**, ordered **runbooks**, and sealed **evidence**.
+
+## What's inside
+
+| | |
+|---|---|
+| **91 checks** | read-only validations across HANA, ABAP (RFC), OS-level and landscape config |
+| **25 actions** | guarded state changes: replica trigger, ramp-down, post-activities, HSR config |
+| **7 runbooks** | ordered read-only sweeps with a single aggregate verdict |
+| **4 cutover phases** | Preparation → Ramp-Down → Downtime → Post-Activities |
 
 ## Principles
 
-- **Stateless** — runs and exits, no memory or embedded knowledge base for planning.
+- **Stateless** — runs and exits; no memory, no embedded planning database.
 - **Two categories, one safety model:**
   - **Checks** are read-only. Safe to run anywhere, any time.
-  - **Actions** change state. They are guarded: pre-checks → dry-run (default) →
-    explicit confirmation → execute → verify → documented rollback.
-- **Safe by construction** — commands are argument lists, never `shell=True`.
-  Secrets are never logged. SSH uses host-key verification.
-- **Plugable** — drop a module under `exodia/modules/` and it is auto-discovered.
-- **Self-sufficient** — an embedded troubleshooting KB maps known errors to a cause,
-  a generic fix, and the relevant **SAP Note number** (we reference notes, never
-  reproduce their copyrighted text).
-- **Defaults + escape hatch** — sensible opinionated defaults for the 80% standard
-  path, plus config/hooks to override anything for the 20% special cases.
+  - **Actions** change state. Guarded: pre-checks → dry-run (default) → explicit
+    confirmation → execute → verify → documented rollback.
+- **Safe by construction** — commands are argument lists, never `shell=True`;
+  secrets are never logged or placed on a command line (HANA auth via the secure
+  user store, `hdbsql -U <key>`); SSH uses host-key verification.
+- **Plugable** — drop a module under `exodia/modules/` and it is auto-discovered
+  in the menu, `list`, and runbooks. No central wiring.
+- **Evidence by default** — every run seals a bundle with a SHA-256 manifest,
+  an append-only event log, and a phased HTML/CSV report.
+- **Defaults + escape hatch** — opinionated defaults for the 80% path, plus
+  config/hooks for the 20%.
 
 ## Install
 
 ```bash
-pip install exodia            # once published to PyPI
-# or, from source:
-pip install -e ".[tui]"
+# from source (Python 3.11+):
+git clone https://github.com/iamtiagomadeira/sap-migration-toolkit.git
+cd sap-migration-toolkit
+python3 -m venv .venv && .venv/bin/pip install -e .
 ```
 
-## Usage
+## Quickstart
 
-The easiest way in — an interactive wizard. No long commands, no YAML to
-hand-craft: pick a methodology, pick an operation, answer only the fields it
-needs (with defaults and inline help), then review and confirm.
+The easiest way in is the **interactive wizard** — no long commands, no YAML to
+hand-craft. It discovers hdbuserstore keys for you and asks only the fields each
+operation needs:
 
 ```bash
-exodia menu                              # guided, operator-friendly front door
+exodia menu        # guided, operator-friendly front door
 ```
 
-Prefer a direct command? Every operation is still scriptable by name:
+Prefer direct commands? Everything is scriptable by name:
 
 ```bash
-exodia list                              # show all discovered checks & actions
-exodia runbooks                          # show all discovered readiness runbooks
-exodia run core.free-space --config my.yaml
-exodia run backup-restore.prepare --db-type hana --source PRD --target QAS
-exodia run backup-restore.restore-db --db-type hana --execute --yes
-exodia doctor                            # self-check
-```
+exodia list                 # every discovered check & action
+exodia runbooks             # every readiness sweep
+exodia cutover-plan         # the day-of playbook: 4 phases, exact commands, gates
+exodia doctor               # self-check
 
-A **runbook** bundles a set of read-only checks into one ordered sweep with a
-single aggregate verdict and a sealed evidence bundle — the fastest way to
-answer "is this system ready?". It re-reads the live system every run (no cached
-state), so it is safe to re-run as often as you like:
-
-```bash
+# a read-only readiness sweep (safe, re-runnable):
 exodia runbook tenant-copy.hana.readiness --config tenant-copy.yaml
-exodia runbook abap.cutover-readiness --config cutover.yaml
 ```
 
-**Air-gapped migrations** (isolated source and target networks) are handled with
-`snapshot` + `compare`: capture one side into a signed, portable file, carry it
-across, and diff it against the other side — the consultant's manual "read here,
-compare there" runbook, automated and tamper-evident:
+Dry-run is the **default** for actions — pass `--execute --yes` to run for real.
+Exit codes are automation-friendly: `0` = nothing blocking, `1` = a blocking
+failure.
+
+## The tenant-copy cutover, end to end
+
+Exodia maps a HANA tenant copy onto the four cutover phases:
+
+![Tenant copy flow](docs/assets/tenant-copy-flow.png)
+
+**Air-gapped by design.** Source (customer) and target (HEC) usually sit in
+isolated networks. Capture one side into a **signed, tamper-evident snapshot**,
+carry it across, and diff it against the other — the consultant's manual "read
+here, compare there" loop, automated:
 
 ```bash
-# with access to the SOURCE (customer):
-exodia snapshot tenant-copy.hana.readiness --side source --config src.yaml -o source.json
-# carry source.json across, then with access to the TARGET (HEC):
-exodia compare source.json --against tenant-copy.hana.readiness --side target --config tgt.yaml
+# in the customer network — capture a signed snapshot:
+exodia snapshot tenant-copy.hana.readiness-source --side source --config source.yaml -o source.json
+
+# carry source.json across, then in the HEC network — diff it live:
+exodia compare source.json --against tenant-copy.hana.readiness-target --side target --config target.yaml
 ```
 
-See the [HANA Tenant Copy operator guide](docs/tenant-copy.md) for the full
-readiness → plan → execute → verify workflow.
+See the **[full coverage map](https://iamtiagomadeira.github.io/sap-migration-toolkit/tenant-copy-coverage/)**
+for every check and action, phase by phase.
 
-Dry-run is the default for actions. Pass `--execute --yes` to actually run (the
-wizard asks you to confirm both, so nothing runs by accident).
-Exit codes are automation-friendly: `0` = nothing blocking, `1` = a blocking failure.
-
-## Example: a guarded HANA restore
-
-A typical system-copy cutover, showing the safety model end to end:
+## Example: a guarded replica trigger
 
 ```bash
-# 1. Read-only pre-checks — safe to run any time, changes nothing
-exodia run backup-restore.prepare --db-type hana --source PRD --target QAS
-#   ✓ target disk space sufficient   ✓ backup catalog reachable
-#   ✓ target SID stopped             ✗ log_mode = normal (expected: overwrite)
-#   → exit 1: one blocking issue, nothing was changed
+# 1. Readiness (read-only) — safe any time, changes nothing
+exodia runbook tenant-copy.hana.readiness-target --config target.yaml
+#   → phase-grouped table + one verdict; exit 1 if any blocker
 
-# 2. Fix the flagged item, then preview the real action (dry-run is default)
-exodia run backup-restore.restore-db --db-type hana --source PRD --target QAS
-#   [DRY-RUN] would run: HDBSettings.sh recoverSys.py --command="RECOVER DATABASE ..."
-#   [DRY-RUN] would verify: SYSTEMDB + tenant reach state 'OK'
+# 2. Preview the copy (dry-run is the default — nothing runs)
+exodia run tenant-copy.hana.copy-tenant --config target.yaml
+#   [DRY-RUN] would run: CREATE DATABASE QAS AS REPLICA OF PRD AT '<src>:3<nn>13'
 
-# 3. Execute for real — explicit opt-in required
-exodia run backup-restore.restore-db --db-type hana --source PRD --target QAS --execute --yes
-#   → pre-checks → execute → verify → on failure, documented rollback steps
+# 3. Execute for real — explicit opt-in, typed-name confirmation, live dashboard
+exodia run tenant-copy.hana.copy-tenant --config target.yaml --execute --yes --monitor
+#   → pre-checks → execute (progress bar + log tail) → verify → rollback on failure
 ```
 
-Every action follows the same path: **pre-checks → dry-run → confirm → execute →
-verify → rollback**. You never touch a destructive step without seeing it first.
+## Supported scenarios
 
-## Status
-
-Alpha. The core execution engine is stable. Methodology modules — backup/restore
-for SAP HANA & SAP ASE, tenant copy, HANA System Replication, and Java (AS Java)
-system copy — are under active development. See the
-[Supported scenarios](#supported-scenarios-target) table below for what's covered
-and what's planned.
-
-## Supported scenarios (target)
-
-| Methodology | Databases | Notes |
+| Methodology | Databases | Coverage |
 |---|---|---|
-| Backup / Restore | HANA, SAP ASE | via native tools + SWPM system copy |
-| Tenant Copy | HANA | cross-host (customer → target), replication or backup method, TLS/SSL SYSTEMDB cert handling |
+| **Tenant Copy** | HANA | cross-host (customer → HEC), replication or backup method, HSR/SSL config, mock-run isolation, post-copy consistency — **most complete** |
+| **ABAP cutover (SAP MIG)** | any | pre-migration checks, ramp-down + post-activities actions, OS & landscape validation |
+| Backup / Restore | HANA, SAP ASE | native tools + SWPM system copy |
 | HANA System Replication | HANA | create / finalize / enable replica |
-| Java (AS Java) system copy | HANA | SLD, SECSTORE, RFC, UME post-copy (PI/PO validated first) |
+| Java (AS Java) system copy | HANA | SLD, SECSTORE, RFC, UME post-copy |
+
+## Security & privacy
+
+- No secrets on command lines or in logs — HANA auth goes through the secure
+  user store (`hdbsql -U <key>`); SSH is key-based with host-key verification.
+- Commands are always argument lists (`list[str]`) — **never** `shell=True`.
+- Report security issues privately via
+  [GitHub Security Advisories](https://github.com/iamtiagomadeira/sap-migration-toolkit/security/advisories/new)
+  — see [SECURITY.md](SECURITY.md).
+
+## Documentation
+
+- **[Getting started & concepts](https://iamtiagomadeira.github.io/sap-migration-toolkit/)**
+- **[HANA Tenant Copy — operator guide](https://iamtiagomadeira.github.io/sap-migration-toolkit/tenant-copy/)**
+- **[Tenant Copy — full coverage](https://iamtiagomadeira.github.io/sap-migration-toolkit/tenant-copy-coverage/)**
+- **[SAP MIG cutover](https://iamtiagomadeira.github.io/sap-migration-toolkit/cutover/)**
+- **[Authoring a module](https://iamtiagomadeira.github.io/sap-migration-toolkit/authoring-a-module/)**
 
 ## Contributing
 
-Contributions are welcome — new methodology modules, checks, and SAP Note mappings
-especially. See [CONTRIBUTING.md](CONTRIBUTING.md) to get started, and please report
-security issues privately per our [security policy](SECURITY.md).
+Contributions are welcome — new methodology modules, checks, and SAP Note
+mappings especially. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+> **Note on SAP Notes:** Exodia references SAP Note *numbers* for remediation and
+> never reproduces their copyrighted text. SAP, HANA, and related marks are
+> trademarks of SAP SE; this is an independent, unofficial open-source project.
 
 ## License
 

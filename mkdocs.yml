@@ -1,16 +1,16 @@
 site_name: SAP Migration Toolkit
 site_description: >-
-  Stateless executor for SAP migration operations — checks & actions for
-  HANA/ASE backup-restore, tenant copy, HSR, and Java AS system copy.
+  Exodia — a stateless, plugable CLI that automates SAP system migrations:
+  HANA tenant copy, backup/restore, HSR, and the ABAP cutover, with dry-run,
+  verification, rollback, and a sealed audit trail.
 site_url: https://iamtiagomadeira.github.io/sap-migration-toolkit/
 repo_url: https://github.com/iamtiagomadeira/sap-migration-toolkit
 repo_name: iamtiagomadeira/sap-migration-toolkit
 edit_uri: edit/main/docs/
-copyright: MIT License
+copyright: MIT License · Independent, unofficial project — not affiliated with SAP SE
 
-# The README/CONTRIBUTING files are shared with GitHub and use GitHub-relative
-# links (CONTRIBUTING.md, LICENSE, ...). The rewrite_links hook fixes them in
-# the rendered HTML; tell MkDocs' validator not to fail strict builds on them.
+# README/CONTRIBUTING use GitHub-relative links; the rewrite_links hook fixes
+# them in the rendered HTML. Don't fail strict builds on them.
 validation:
   links:
     unrecognized_links: ignore
@@ -20,15 +20,19 @@ theme:
   name: material
   icon:
     repo: fontawesome/brands/github
+    logo: material/database-sync
   features:
     - navigation.instant
     - navigation.tracking
     - navigation.sections
     - navigation.top
+    - navigation.footer
     - content.code.copy
+    - content.code.annotate
     - content.action.edit
     - search.suggest
     - search.highlight
+    - toc.follow
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
@@ -47,25 +51,35 @@ theme:
 
 nav:
   - Home: index.md
-  - HANA Tenant Copy: tenant-copy.md
-  - Tenant Copy — Full Coverage: tenant-copy-coverage.md
+  - Getting Started: getting-started.md
+  - Core Concepts: concepts.md
+  - HANA Tenant Copy:
+      - Operator Guide: tenant-copy.md
+      - Full Coverage: tenant-copy-coverage.md
   - SAP MIG Cutover: cutover.md
-  - Authoring a module: authoring-a-module.md
-  - Contributing: contributing.md
+  - Contributing:
+      - Authoring a Module: authoring-a-module.md
+      - Contributing Guide: contributing.md
+      - Security: security.md
   - Changelog: changelog.md
-  - Security: security.md
 
 markdown_extensions:
   - admonition
   - attr_list
   - md_in_html
   - tables
+  - def_list
   - toc:
       permalink: true
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.superfences
   - pymdownx.inlinehilite
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.tabbed:
+      alternate_style: true
   - pymdownx.snippets:
       base_path: [.]
       check_paths: true

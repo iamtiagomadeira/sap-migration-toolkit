@@ -1,30 +1,30 @@
 flowchart TD
-    START([HANA Tenant Copy - Exodia]):::title
+    START([HANA Tenant Copy — Exodia]):::title
 
-    subgraph PREP["① PREPARATION PHASE - read-only, no downtime"]
+    subgraph PREP["① PREPARATION PHASE — read-only, no downtime"]
         direction TB
-        P1["SOURCE checks<br/>• source-userstore-key<br/>• source-tenant-online<br/>• source-ports M_SERVICES<br/>• source-replication-parameters<br/>• source-replication-status"]:::src
-        P2["TARGET checks<br/>• target-userstore-key<br/>• target-tenant-absent<br/>• target-ports M_SERVICES<br/>• target-replication-parameters<br/>• cross-host-reachability<br/>• version-match · ssl-collateral<br/>• target-license · data/log-space"]:::tgt
+        P1["SOURCE readiness<br/>• source-userstore-key<br/>• source-tenant-online M_DATABASES<br/>• source-ports M_SERVICES<br/>• source-replication-parameters<br/>• source-replication-status HSR<br/>• source-table-consistency 1785060<br/>• source-catalog-consistency"]:::src
+        P2["TARGET readiness<br/>• target-userstore-key<br/>• target-tenant-absent · version-match<br/>• target-ports · target-replication-parameters<br/>• cross-host-reachability<br/>• ssl-collateral · target-license<br/>• target-data-space · target-log-space"]:::tgt
         P3["ACTIONS target<br/>⚙ configure-hsr-parameters SSL on/off<br/>⚙ restart-hana HDB stop/start"]:::act
         P1 --- P2 --- P3
     end
 
-    subgraph RAMP["② RAMP-DOWN PHASE - quiesce source, downtime begins"]
+    subgraph RAMP["② RAMP-DOWN PHASE — quiesce source (ABAP), downtime begins"]
         direction TB
-        R1["ABAP ramp-down actions source<br/>⚙ suspend-jobs BTCTRNS1<br/>⚙ adapt-operation-modes SM63<br/>⚙ lock-users SU10<br/>⛔ stop-app-servers customer-gated<br/>✋ inform-customer manual"]:::act
+        R1["ABAP ramp-down actions (source)<br/>⚙ suspend-jobs BTCTRNS1 · adapt-operation-modes SM63<br/>⚙ lock-users SU10<br/>⛔ stop-app-servers customer-gated<br/>✋ inform-customer manual"]:::act
     end
 
     subgraph DOWN["③ DOWNTIME / EXECUTION PHASE"]
         direction TB
-        D1["⚙ copy-tenant<br/>CREATE DATABASE AS REPLICA OF<br/>live progress + log dashboard"]:::copy
-        D2["Mock-Run isolation dry-run only<br/>⚙ mock-isolate-users USR02<br/>⚙ mock-isolate-rfcs RFCDES<br/>⚙ mock-stop-jobs TBTCO<br/>backup + reverse each"]:::mock
+        D1["⚙ copy-tenant<br/>CREATE DATABASE AS REPLICA OF<br/>live progress + log dashboard + sync polling"]:::copy
+        D2["Mock-Run isolation (dry-run only)<br/>⚙ mock-isolate-users USR02 · mock-isolate-rfcs RFCDES<br/>⚙ mock-stop-jobs TBTCO — backup + reverse each"]:::mock
         D1 --- D2
     end
 
-    subgraph POST["④ POST-ACTIVITIES PHASE - re-open target"]
+    subgraph POST["④ POST-ACTIVITIES PHASE — re-open + validate target"]
         direction TB
-        PO1["Reconnect + cleanup actions<br/>⚙ reconnect-verify R3trans + hdbsql<br/>⚙ delete-abap-dict-data<br/>⚙ start-app-servers · resume-jobs<br/>⚙ unlock-users · validate-online"]:::act
-        PO2["Validation checks<br/>• secure-communication ON<br/>• data-consistency top tables<br/>• post-copy verify counts"]:::chk
+        PO1["Reconnect + cleanup actions<br/>⚙ reconnect-verify R3trans + hdbsql<br/>⚙ delete-abap-dict-data<br/>⚙ (ABAP) start-app-servers · resume-jobs · unlock-users"]:::act
+        PO2["Validation checks<br/>• secure-communication ON<br/>• data-consistency top tables<br/>• target-table-consistency 1785060<br/>• target-catalog-consistency"]:::chk
         PO1 --- PO2
     end
 
