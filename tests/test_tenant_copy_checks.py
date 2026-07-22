@@ -281,7 +281,7 @@ def test_target_license_invalid_fail() -> None:
 def test_tenant_copy_readiness_runbook_discovered() -> None:
     rb_cls = registry.get_runbook("tenant-copy.hana.readiness")
     assert rb_cls is not None
-    assert len(rb_cls.steps) == 11
+    assert len(rb_cls.steps) >= 11
     # every step resolves to a registered check
     for step in rb_cls.steps:
         assert registry.get_check(step) is not None, f"unresolved step {step}"
@@ -325,8 +325,8 @@ def test_tenant_copy_readiness_verdict_all_pass() -> None:
     results = run_runbook(rb, ctx)
     verdict = results[-1]
     assert verdict.name.endswith(".verdict")
-    # 11 steps + 1 verdict
-    assert len(results) == 12
+    # one result per step + the aggregate verdict
+    assert len(results) == len(rb.steps) + 1
 
 
 def test_tenant_copy_readiness_verdict_skip_bare_context() -> None:

@@ -39,7 +39,9 @@ class TenantCopyReadinessRunbook(Runbook):
     name = "tenant-copy.hana.readiness"
     description = (
         "Read-only HANA cross-host tenant-copy prerequisite sweep: connectivity, "
-        "topology, pre-conditions and capacity, with one aggregate verdict."
+        "topology, pre-conditions, capacity and consistency, with one aggregate "
+        "verdict. Use when one host can reach both SYSTEMDBs; otherwise use the "
+        "side-scoped readiness-source / readiness-target runbooks."
     )
     stop_on_blocking = False
     steps = [
@@ -51,11 +53,19 @@ class TenantCopyReadinessRunbook(Runbook):
         "tenant-copy.hana.source-tenant-online",
         "tenant-copy.hana.target-tenant-absent",
         "tenant-copy.hana.version-match",
-        # 3. pre-conditions — SSL, replication state, licensing
+        # 3. ports + replication parameters (both SYSTEMDBs)
+        "tenant-copy.hana.source-ports",
+        "tenant-copy.hana.target-ports",
+        "tenant-copy.hana.source-replication-parameters",
+        "tenant-copy.hana.target-replication-parameters",
+        # 4. pre-conditions — SSL, replication state, licensing
         "tenant-copy.hana.ssl-collateral",
         "tenant-copy.hana.source-replication-status",
         "tenant-copy.hana.target-license",
-        # 4. capacity — room for the copy on the target volumes
+        # 5. capacity — room for the copy on the target volumes
         "tenant-copy.hana.target-data-space",
         "tenant-copy.hana.target-log-space",
+        # 6. source consistency baseline (table + catalog)
+        "tenant-copy.hana.source-table-consistency",
+        "tenant-copy.hana.source-catalog-consistency",
     ]
