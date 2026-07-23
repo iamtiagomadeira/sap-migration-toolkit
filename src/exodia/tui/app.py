@@ -23,6 +23,7 @@ but deferred to the guarded CLI flow.
 
 from __future__ import annotations
 
+import contextlib
 from datetime import UTC, datetime
 
 from textual import work
@@ -82,6 +83,17 @@ _STATUS_CLASS = {
     Status.FAIL: "fail",
     Status.SKIP: "skip",
     Status.ERROR: "err",
+}
+
+# Compact per-phase labels for the phase-progress panel (kept short so the bars
+# line up). Falls back to the LIFECYCLE_PHASES label with its leading number
+# stripped for any phase not listed here.
+_PHASE_SHORT = {
+    "preparation": "Preparation",
+    "ramp_down": "Ramp-Down",
+    "downtime": "Downtime",
+    "post": "Post",
+    "unclassified": "Other",
 }
 
 # Human labels for the application-server stacks offered in the context modal.
@@ -215,6 +227,17 @@ class ExodiaTUI(App[None]):
         self._started_at = datetime.now(UTC)
         # active context: None until a method is configured via the modal.
         self._active_ctx: dict | None = None
+        # Phase-progress state (distinct names to avoid clashing with internal
+        # Textual App attributes — a past bug had self._context shadow
+        # App._context and hang compose).
+        # ordered phase keys currently shown (subset of LIFECYCLE_PHASES keys)
+        self._phase_order: list[str] = []
+        # phase_key -> total expected ops in the active context
+        self._phase_totals: dict[str, int] = {}
+        # phase_key -> set of Result.name seen (dedup so re-runs don't overcount)
+        self._phase_done: dict[str, set[str]] = {}
+        # Result.name -> phase_key map for the active context
+        self._name_to_phase: dict[str, str] = {}
         self._counts = {
             "checks": len(registry.checks()),
             "actions": len(registry.actions()),
@@ -248,6 +271,13 @@ class ExodiaTUI(App[None]):
                         "(System Copy or System Transition) and press Enter "
                         "to configure Source/Target DB + stack.[/]",
                         id="detail-body",
+                        markup=True,
+                    )
+                with Container(id="phasepanel"):
+                    yield Static("Phase progress", classes="panel-title")
+                    yield Static(
+                        self._phase_board_text(),
+                        id="phase-board",
                         markup=True,
                     )
                 with Container(id="logpanel"):
@@ -326,6 +356,138 @@ class ExodiaTUI(App[None]):
                     data={"kind": "runbook", "name": name, "desc": desc},
                 )
         tree.focus()
+
+    # -- phase progress ----------------------------------------------------- #
+    def _rebuild_phase_progress(self) -> None:
+        """Recompute per-phase totals + name→phase map from the active context.
+
+        Called after the context modal confirms. Only phases that actually exist
+        in this (method, stack) context are shown (via ``group_by_phase``), so a
+        context with just Preparation+Downtime+Post shows three bars, not four.
+        Any previously accumulated progress is reset — a new plan starts empty.
+        """
+        self._phase_order = []
+        self._phase_totals = {}
+        self._phase_done = {}
+        self._name_to_phase = {}
+        if self._active_ctx is None:
+            self._refresh_phase_board()
+            return
+        ctx = self._active_ctx
+        ctx_ops = operations_for_context(
+            self._ops, methodology=ctx["methodology"], stack=ctx["stack"]
+        )
+        for key, _label, group in group_by_phase(ctx_ops):
+            self._phase_order.append(key)
+            self._phase_totals[key] = len(group)
+            self._phase_done[key] = set()
+            for op in group:
+                self._name_to_phase[op.name] = key
+        self._refresh_phase_board()
+
+    def _reset_phase_progress(self) -> None:
+        """Clear all phase-progress state (back to the no-context view)."""
+        self._phase_order = []
+        self._phase_totals = {}
+        self._phase_done = {}
+        self._name_to_phase = {}
+        self._refresh_phase_board()
+
+    def _record_phase_result(self, result: Result) -> None:
+        """Attribute a Result to its lifecycle phase for the progress bars.
+
+        The Result carries an explicit ``.phase`` enum, but we prefer the
+        context's own name→phase map (built from the active plan) so a result
+        counts against the exact bar shown. Falls back to the Result's declared
+        phase when the name is not in the active context. Dedups by name so
+        re-running the same op does not overshoot the total.
+        """
+        if not self._phase_order:
+            return
+        phase_key = self._name_to_phase.get(result.name)
+        if phase_key is None:
+            phase_key = getattr(result.phase, "value", None)
+        if phase_key not in self._phase_done:
+            return
+        self._phase_done[phase_key].add(result.name)
+        self._refresh_phase_board()
+
+    def _phase_agg_icon(self, phase_key: str) -> str:
+        """Aggregate status glyph for a phase from the results seen so far.
+
+        ❌ any FAIL/ERROR · ⚠️ any WARN · ✅ all done & clean · ⏳ in progress ·
+        empty string when nothing has run for the phase yet.
+        """
+        done = self._phase_done.get(phase_key, set())
+        if not done:
+            return ""
+        statuses = [
+            r.status
+            for r in self._results
+            if self._name_to_phase.get(r.name, getattr(r.phase, "value", None))
+            == phase_key
+        ]
+        if any(s in (Status.FAIL, Status.ERROR) for s in statuses):
+            return _STATUS_ICON[Status.FAIL]
+        if any(s is Status.WARN for s in statuses):
+            return _STATUS_ICON[Status.WARN]
+        total = self._phase_totals.get(phase_key, 0)
+        if len(done) >= total and total > 0:
+            return _STATUS_ICON[Status.PASS]
+        return "⏳"
+
+    def _phase_board_text(self) -> str:
+        """Render the compact per-phase progress board (markup string).
+
+        One line per phase in cutover order:
+            ``Preparation   ▓▓▓▓▓░░░░░  5/10  ⏳``
+        The filled portion is coloured by the aggregate phase state (success /
+        warning / error / in-progress). When no context is active, prompts the
+        operator to configure a method.
+        """
+        if not self._phase_order:
+            return (
+                "[dim]Configure a migration method (pick one on the left and "
+                "press Enter) to see phase-by-phase progress here.[/]"
+            )
+        bar_w = 10
+        # widest short label so the bars align in a column
+        label_w = max(
+            (len(_PHASE_SHORT.get(k, k)) for k in self._phase_order), default=0
+        )
+        lines: list[str] = []
+        for key in self._phase_order:
+            total = self._phase_totals.get(key, 0)
+            done = len(self._phase_done.get(key, set()))
+            filled = round(bar_w * done / total) if total else 0
+            # show at least one filled cell once any op has run, and never
+            # overfill; a fully-done phase always shows a full bar.
+            if done and total:
+                filled = max(1, min(bar_w, filled))
+                if done >= total:
+                    filled = bar_w
+            else:
+                filled = 0
+            icon = self._phase_agg_icon(key)
+            if icon == _STATUS_ICON[Status.FAIL]:
+                klass = "fail"
+            elif icon == _STATUS_ICON[Status.WARN]:
+                klass = "warn"
+            elif icon == _STATUS_ICON[Status.PASS]:
+                klass = "pass"
+            else:
+                klass = "accent"
+            bar = f"[{klass}]{'▓' * filled}[/][dim]{'░' * (bar_w - filled)}[/]"
+            label = _PHASE_SHORT.get(key, key).ljust(label_w)
+            lines.append(
+                f"[b]{label}[/]  {bar}  [b]{done}/{total}[/]  {icon}".rstrip()
+            )
+        return "\n".join(lines)
+
+    def _refresh_phase_board(self) -> None:
+        """Push the current phase board into its Static (no-op before mount)."""
+        with contextlib.suppress(Exception):  # widget not mounted yet
+            self.query_one("#phase-board", Static).update(self._phase_board_text())
 
     # -- setup after mount -------------------------------------------------- #
     def on_mount(self) -> None:
@@ -431,6 +593,7 @@ class ExodiaTUI(App[None]):
                 f"stack={result['stack']}"
             )
             self._rebuild_tree_for_context()
+            self._rebuild_phase_progress()
 
         self.push_screen(ContextModal(methodology, pretty(methodology)), _on_close)
 
@@ -439,6 +602,7 @@ class ExodiaTUI(App[None]):
         if self._active_ctx is None:
             return
         self._active_ctx = None
+        self._reset_phase_progress()
         tree = self.query_one(Tree)
         tree.clear()
         tree.show_root = False
@@ -527,6 +691,7 @@ class ExodiaTUI(App[None]):
 
     def mon_result(self, result: Result) -> None:
         self._results.append(result)
+        self._record_phase_result(result)
         icon = _STATUS_ICON.get(result.status, "")
         klass = _STATUS_CLASS.get(result.status, "")
         table = self.query_one("#results", DataTable)

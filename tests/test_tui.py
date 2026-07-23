@@ -109,3 +109,71 @@ async def test_action_run_does_not_execute() -> None:
         await pilot.pause()
         # no new result rows — actions never execute from the TUI
         assert table.row_count == before
+
+
+async def test_phase_panel_survives_without_context() -> None:
+    """The phase-progress panel mounts and renders with no active context.
+
+    Guards the compose path (a past bug hung compose via an attribute clash):
+    with no method configured, the board must show a prompt, not crash.
+    """
+    app = ExodiaTUI()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        board = app.query_one("#phase-board", Static)
+        assert board is not None
+        # no context => no phase bars tracked, board shows the configure prompt
+        assert app._phase_order == []
+        assert app._phase_totals == {}
+        # recording a stray result must not raise when nothing is tracked
+        from exodia.core.result import Result
+
+        app._record_phase_result(Result.ok("some.orphan.check", "noop"))
+        await pilot.pause()
+
+
+async def test_phase_bar_reflects_a_run() -> None:
+    """After configuring a context and running a check, its phase bar advances.
+
+    Configures a backup-restore context directly (bypassing the modal), rebuilds
+    the phase plan, then drives a real preparation-phase check through the
+    worker. The preparation bar must then show >= 1 done out of its total.
+    """
+    from exodia.core.menu import operations_for_context
+
+    app = ExodiaTUI()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        # configure a context without going through the modal
+        app._active_ctx = {
+            "methodology": "backup-restore",
+            "source_db": "HANA",
+            "target_db": "HANA",
+            "stack": "abap",
+        }
+        app._rebuild_phase_progress()
+        await pilot.pause()
+
+        # the plan must expose a preparation phase with a non-zero total
+        assert "preparation" in app._phase_order
+        prep_total = app._phase_totals["preparation"]
+        assert prep_total > 0
+        assert len(app._phase_done["preparation"]) == 0
+
+        # pick a real preparation-phase check from this context and run it
+        ctx_ops = operations_for_context(
+            app._ops, methodology="backup-restore", stack="abap"
+        )
+        prep_check = next(
+            o for o in ctx_ops if o.kind == "check" and o.phase == "preparation"
+        )
+        app._run_worker(kind="check", name=prep_check.name)
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        # the preparation bar now reflects at least one completed op
+        assert len(app._phase_done["preparation"]) >= 1
+        board_text = app._phase_board_text()
+        assert "Preparation" in board_text
+        assert "▓" in board_text  # at least one filled cell rendered
+

@@ -73,6 +73,21 @@ Screen {
     padding: 0 1;
 }
 
+/* phase-progress board: compact per-phase bars, between detail and log */
+#phasepanel {
+    height: auto;
+    min-height: 6;
+    border: round $primary-darken-1;
+    background: $panel;
+    padding: 0 1;
+}
+
+#phase-board {
+    height: auto;
+    padding: 0 1;
+    background: $panel;
+}
+
 #logpanel {
     height: 1fr;
     border: round $primary-darken-1;
@@ -119,6 +134,7 @@ Screen {
 .fail  { color: $error; }
 .skip  { color: $text-muted; }
 .err   { color: $error; text-style: bold; }
+.accent { color: $accent; }
 
 /* the run notice / action-guard banner */
 .notice {
