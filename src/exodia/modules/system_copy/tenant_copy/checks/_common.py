@@ -38,6 +38,10 @@ _INSTANCE_RE = re.compile(r"^\d{2}$")
 _SID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]{2}$")
 # HANA tenant (database) names: up to 8 chars, letter first, alphanumerics/underscore.
 _TENANT_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,7}$")
+# SAP DB schema / object identifiers interpolated into DDL (never bindable as a
+# parameter): letter first, then alphanumerics/underscore. Rejects quotes,
+# whitespace and semicolons so an identifier can never break out of a statement.
+_SCHEMA_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 # A HANA version string like "2.00.067.00.1234567890".
 _VERSION_RE = re.compile(r"(\d+\.\d+\.\d+(?:\.\d+)*)")
 
@@ -134,6 +138,18 @@ def is_valid_tenant(value: str | None) -> bool:
     if not value or value.upper() == "SYSTEMDB":
         return False
     return bool(_TENANT_RE.match(value))
+
+
+def is_valid_schema(value: str | None) -> bool:
+    """Validate a SAP DB schema / object identifier before it goes into DDL.
+
+    Schema and table names cannot be passed as bound parameters (they name the
+    object, not a value), so they are interpolated into the statement. This
+    guard guarantees the identifier is a plain SQL identifier — letter first,
+    then alphanumerics/underscore — so it can never carry a quote, whitespace or
+    semicolon that would let it break out of the statement.
+    """
+    return bool(value) and bool(_SCHEMA_RE.match(value or ""))
 
 
 def parse_version(text: str | None) -> tuple[int, ...] | None:

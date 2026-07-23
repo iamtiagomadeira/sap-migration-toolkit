@@ -22,6 +22,8 @@ confirm → execute → verify (the backup exists and is non-empty).
 from __future__ import annotations
 
 import shlex
+import tempfile
+from pathlib import Path
 
 from exodia.core import Context, Result
 from exodia.core.base import Action
@@ -46,7 +48,10 @@ def _scope(ctx: Context) -> str:
 
 
 def _dest_root(ctx: Context) -> str:
-    return str(ctx.get("backup_dir") or f"/tmp/exodia-profile-backup/{_sid(ctx)}")
+    # Default lives under the OS temp dir (portable, not a hardcoded /tmp); the
+    # ``backup_dir`` param always takes precedence for a real, durable location.
+    default = str(Path(tempfile.gettempdir()) / "exodia-profile-backup" / _sid(ctx))
+    return str(ctx.get("backup_dir") or default)
 
 
 def _sources(ctx: Context) -> list[str]:

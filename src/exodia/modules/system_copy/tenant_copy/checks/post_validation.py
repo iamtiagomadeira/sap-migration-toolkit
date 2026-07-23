@@ -92,9 +92,11 @@ class DataConsistencyCheck(Check):
 
     def _top_tables(self, ctx: Context, key: str) -> dict[str, int] | None:
         schema = str(ctx.get("abap_schema", "SAPABAP1"))
+        if not c.is_valid_schema(schema):
+            return None
         top_n = int(ctx.get("top_n", 30))
         sql = (
-            f"SELECT TOP {top_n} TABLE_NAME, RECORD_COUNT FROM M_TABLES "
+            f"SELECT TOP {top_n} TABLE_NAME, RECORD_COUNT FROM M_TABLES "  # nosec B608 - top_n coerced to int; schema validated by is_valid_schema (no quote/space/semicolon possible)
             f"WHERE SCHEMA_NAME = '{schema}' ORDER BY RECORD_COUNT DESC"
         )
         cr = ctx.runner().run(

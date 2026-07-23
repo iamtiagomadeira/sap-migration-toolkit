@@ -18,12 +18,21 @@ stop). Technical users (DDIC + an explicit keep-list) are always spared.
 
 from __future__ import annotations
 
+import re
+
 from exodia.core import Context, Result
 from exodia.core.base import Action
 from exodia.core.params import ParamSpec
 from exodia.core.result import Phase
 
+from ..checks import _common as c
+
 _DEFAULT_SPARED = ["DDIC"]
+
+# SAP business/technical user names (USR02.BNAME): letters, digits, and the
+# handful of punctuation SAP allows (_ . -). Rejects quotes/whitespace/semicolons
+# so a spared-user name can never break out of the IN (...) list literal.
+_USER_RE = re.compile(r"^[A-Za-z0-9_.\-]{1,12}$")
 
 
 def _tenant_key(ctx: Context) -> str:
@@ -31,7 +40,13 @@ def _tenant_key(ctx: Context) -> str:
 
 
 def _schema(ctx: Context) -> str:
-    return str(ctx.get("abap_schema", "SAPABAP1"))
+    schema = str(ctx.get("abap_schema", "SAPABAP1"))
+    if not c.is_valid_schema(schema):
+        raise ValueError(
+            f"invalid abap_schema '{schema}' — must be a plain SQL identifier "
+            "(letter first, then alphanumerics/underscore)"
+        )
+    return schema
 
 
 def _hdbsql(ctx: Context, sql: str) -> list[str]:
@@ -42,7 +57,14 @@ def _hdbsql(ctx: Context, sql: str) -> list[str]:
 
 def _spared_users(ctx: Context) -> list[str]:
     extra = [u.strip() for u in str(ctx.get("keep_unlocked") or "").split(",") if u.strip()]
-    return _DEFAULT_SPARED + extra
+    users = _DEFAULT_SPARED + extra
+    invalid = [u for u in users if not _USER_RE.match(u)]
+    if invalid:
+        raise ValueError(
+            f"invalid keep_unlocked user name(s) {invalid} — expected SAP user "
+            "names (letters/digits/_.- only, no quotes or spaces)"
+        )
+    return users
 
 
 class _MockAction(Action):
@@ -73,7 +95,7 @@ class _MockAction(Action):
         if not _tenant_key(ctx):
             return Result.skip(f"{self.name}.execute", "no tenant_key provided")
         schema = _schema(ctx)
-        sql = f'CREATE TABLE "{schema}"."{self.backup_table}" AS (SELECT * FROM "{schema}"."{self.table}")'
+        sql = f'CREATE TABLE "{schema}"."{self.backup_table}" AS (SELECT * FROM "{schema}"."{self.table}")'  # nosec B608 - schema validated by is_valid_schema; table/backup_table are class-level literals (no user input)
         self._emit_log(f"$ backup {self.table} -> {self.backup_table}")
         cr = ctx.runner().run(_hdbsql(ctx, sql), timeout=int(ctx.get("mock_timeout", 300)))
         # A pre-existing backup table is fine (already backed up); other errors fail.
@@ -93,8 +115,8 @@ class _MockAction(Action):
         schema = _schema(ctx)
         # Truncate + reinsert from backup, then drop the backup.
         stmts = [
-            f'TRUNCATE TABLE "{schema}"."{self.table}"',
-            f'INSERT INTO "{schema}"."{self.table}" SELECT * FROM "{schema}"."{self.backup_table}"',
+            f'TRUNCATE TABLE "{schema}"."{self.table}"',  # nosec B608 - schema validated by is_valid_schema; table is a class-level literal (no user input)
+            f'INSERT INTO "{schema}"."{self.table}" SELECT * FROM "{schema}"."{self.backup_table}"',  # nosec B608 - schema validated by is_valid_schema; table/backup_table are class-level literals (no user input)
         ]
         for sql in stmts:
             cr = ctx.runner().run(_hdbsql(ctx, sql), timeout=int(ctx.get("mock_timeout", 300)))
@@ -124,7 +146,7 @@ class MockIsolateUsersAction(_MockAction):
             "[MOCK-RUN] would back up USR02 then lock all active users (UFLAG 0->65) "
             f"except {', '.join(spared)}",
             detail=(
-                f'  1. CREATE TABLE "{_schema(ctx)}"."BKP_USR02" AS (SELECT * FROM USR02)\n'
+                f'  1. CREATE TABLE "{_schema(ctx)}"."BKP_USR02" AS (SELECT * FROM USR02)\n'  # nosec B608 - schema validated by is_valid_schema; display-only dry-run detail (not executed)
                 "  2. UPDATE USR02 SET UFLAG='65' WHERE UFLAG='0' AND BNAME NOT IN (...)"
             ),
             facts={"Table": "USR02", "Spared": ", ".join(spared), "Mock-Run": "yes"},
@@ -137,7 +159,7 @@ class MockIsolateUsersAction(_MockAction):
             return bk
         spared = _spared_users(ctx)
         in_list = ", ".join(f"'{u}'" for u in spared)
-        sql = f"UPDATE USR02 SET UFLAG = '65' WHERE UFLAG = '0' AND BNAME NOT IN ({in_list})"
+        sql = f"UPDATE USR02 SET UFLAG = '65' WHERE UFLAG = '0' AND BNAME NOT IN ({in_list})"  # nosec B608 - in_list built from _spared_users (each name validated by _USER_RE, no quote/space possible); rest is a literal
         cr = ctx.runner().run(_hdbsql(ctx, sql), timeout=int(ctx.get("mock_timeout", 300)))
         if not cr.ok:
             return Result.fail(phase, "failed to lock users on the copied tenant",
@@ -167,7 +189,7 @@ class MockIsolateRfcsAction(_MockAction):
             "[MOCK-RUN] would back up RFCDES then prefix target hosts (G=/H=/N=/X=) "
             "with '#' so RFC destinations cannot reach the outside world",
             detail=(
-                f'  1. CREATE TABLE "{_schema(ctx)}"."BKP_RFCDEST" AS (SELECT * FROM RFCDES)\n'
+                f'  1. CREATE TABLE "{_schema(ctx)}"."BKP_RFCDEST" AS (SELECT * FROM RFCDES)\n'  # nosec B608 - schema validated by is_valid_schema; display-only dry-run detail (not executed)
                 "  2. UPDATE RFCDES SET RFCOPTIONS = REPLACE(...,'G=','G=#') WHERE ..."
             ),
             facts={"Table": "RFCDES", "Mock-Run": "yes"},
@@ -217,7 +239,7 @@ class MockStopJobsAction(_MockAction):
             "[MOCK-RUN] would back up TBTCO then set released jobs (STATUS 'S'->'Z') "
             "except RDDIMPDP%",
             detail=(
-                f'  1. CREATE TABLE "{_schema(ctx)}"."BKP_TBTCO" AS (SELECT * FROM TBTCO)\n'
+                f'  1. CREATE TABLE "{_schema(ctx)}"."BKP_TBTCO" AS (SELECT * FROM TBTCO)\n'  # nosec B608 - schema validated by is_valid_schema; display-only dry-run detail (not executed)
                 "  2. UPDATE TBTCO SET STATUS='Z', LASTCHNAME='DDIC' WHERE STATUS='S' "
                 "AND JOBNAME NOT LIKE 'RDDIMPDP%'"
             ),

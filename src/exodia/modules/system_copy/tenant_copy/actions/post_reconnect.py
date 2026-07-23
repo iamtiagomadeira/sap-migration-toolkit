@@ -24,6 +24,8 @@ from exodia.core.base import Action
 from exodia.core.params import ParamKind, ParamSpec
 from exodia.core.result import Phase
 
+from ..checks import _common as c
+
 # The migration-stale tables the runbook clears on the target (schema-qualified
 # at runtime). Monitoring/dictionary history that must not carry over.
 _DICT_TABLES = [
@@ -33,7 +35,13 @@ _DICT_TABLES = [
 
 
 def _schema(ctx: Context) -> str:
-    return str(ctx.get("abap_schema", "SAPABAP1"))
+    schema = str(ctx.get("abap_schema", "SAPABAP1"))
+    if not c.is_valid_schema(schema):
+        raise ValueError(
+            f"invalid abap_schema '{schema}' — must be a plain SQL identifier "
+            "(letter first, then alphanumerics/underscore)"
+        )
+    return schema
 
 
 class ReconnectVerifyAction(Action):
@@ -70,7 +78,7 @@ class ReconnectVerifyAction(Action):
         return Result.ok(
             f"{self.name}.dry-run",
             f"would test DB connection (hdbsql -U {key}) and the transport system (R3trans -x)",
-            detail=f"  1. hdbsql -U {key} \"SELECT 1 FROM DUMMY\"\n  2. R3trans -x",
+            detail=f'  1. hdbsql -U {key} "SELECT 1 FROM DUMMY"\n  2. R3trans -x',  # nosec B608 - display-only dry-run text (not executed); key is an hdbuserstore key name, SQL is a literal
             facts={"Connection Key": key},
         )
 
@@ -134,7 +142,7 @@ class DeleteAbapDictDataAction(Action):
 
     def dry_run(self, ctx: Context) -> Result:
         schema = _schema(ctx)
-        stmts = [f"DELETE FROM {schema}.{t};" for t in _DICT_TABLES]
+        stmts = [f"DELETE FROM {schema}.{t};" for t in _DICT_TABLES]  # nosec B608 - schema validated by is_valid_schema; table names from the _DICT_TABLES literal allow-list (no user input)
         return Result.ok(
             f"{self.name}.dry-run",
             f"would clear {len(_DICT_TABLES)} migration-stale table(s) in schema {schema}",
@@ -152,7 +160,7 @@ class DeleteAbapDictDataAction(Action):
         cleared: list[str] = []
         n = len(_DICT_TABLES)
         for i, t in enumerate(_DICT_TABLES, start=1):
-            sql = f"DELETE FROM {schema}.{t}"
+            sql = f"DELETE FROM {schema}.{t}"  # nosec B608 - schema validated by is_valid_schema; t from the _DICT_TABLES literal allow-list (no user input)
             self._emit_phase(f"clear {i}/{n}", t)
             cr = ctx.runner().run(
                 ["hdbsql", "-U", key, "-x", "-a", "-j", sql],

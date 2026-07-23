@@ -275,10 +275,16 @@ class TenantCopyAction(Action):
         tgt = self._target_tenant(ctx)
         if not tgt:
             return Result.fail(phase, "no target tenant to verify")
+        if not c.is_valid_tenant(tgt):
+            return Result.fail(
+                phase,
+                f"invalid target tenant name '{tgt}' — refusing to build a verify "
+                "query (expected a plain HANA tenant identifier)",
+            )
         key = self._target_key(ctx)
         sql = (
             "SELECT DATABASE_NAME, ACTIVE_STATUS FROM SYS_DATABASES.M_DATABASES "
-            f"WHERE DATABASE_NAME = '{tgt}'"
+            f"WHERE DATABASE_NAME = '{tgt}'"  # nosec B608 - tgt validated by is_valid_tenant regex above (no quote/space/semicolon possible)
         )
         cr = ctx.runner().run(
             ["hdbsql", "-U", key, "-x", "-a", "-j", sql],

@@ -38,7 +38,7 @@ class SourceTenantOnlineCheck(Check):
             )
         stmt = (
             "SELECT DATABASE_NAME, ACTIVE_STATUS FROM SYS_DATABASES.M_DATABASES "
-            f"WHERE DATABASE_NAME = '{tenant}'"
+            f"WHERE DATABASE_NAME = '{tenant}'"  # nosec B608 - tenant validated by is_valid_tenant regex above (no quote/space/semicolon possible)
         )
         cr = c.run(ctx, c.hdbsql_argv(ctx, c.SOURCE, stmt))
         if not cr.ok:
@@ -91,7 +91,7 @@ class TargetTenantAbsentCheck(Check):
             )
         stmt = (
             "SELECT DATABASE_NAME FROM SYS_DATABASES.M_DATABASES "
-            f"WHERE DATABASE_NAME = '{tenant}'"
+            f"WHERE DATABASE_NAME = '{tenant}'"  # nosec B608 - tenant validated by is_valid_tenant regex above (no quote/space/semicolon possible)
         )
         cr = c.run(ctx, c.hdbsql_argv(ctx, c.TARGET, stmt))
         if not cr.ok:
