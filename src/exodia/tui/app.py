@@ -342,8 +342,14 @@ class ExodiaTUI(App[None]):
                     "kind": op.kind,
                     "name": op.name,
                     "desc": op.description,
+                    "label": op.label,
                 }
-                phase_node.add_leaf(f"{icon} {op.name}", data=data)
+                # Human label leads; the raw machine name trails in dim so an
+                # admin reads "SM04/AL08 — Logged-On Users Check" not
+                # "abap.readiness.active-users", but can still copy the id.
+                phase_node.add_leaf(
+                    f"{icon} {op.label}  [dim]· {op.name}[/]", data=data
+                )
 
         # Method-level runbooks (one-click sweeps) as a dedicated top group.
         rbs = runbooks_in(registry, method)
@@ -561,8 +567,10 @@ class ExodiaTUI(App[None]):
         elif kind == "check":
             check_cls = registry.get_check(data["name"])
             blocking = getattr(check_cls, "blocking", False) if check_cls else False
+            label = data.get("label") or data["name"]
             body.update(
-                f"[b cyan]{data['name']}[/]  [dim](read-only check)[/]\n\n"
+                f"[b cyan]🔍 {label}[/]  [dim](read-only check)[/]\n"
+                f"[dim]· {data['name']}[/]\n\n"
                 f"{data.get('desc') or '—'}\n\n"
                 f"blocking: [b]{'yes' if blocking else 'no'}[/]\n"
                 f"[green]▶ Enter to run — safe, reads the live system.[/]"
@@ -570,8 +578,10 @@ class ExodiaTUI(App[None]):
         elif kind == "runbook":
             rb_cls = registry.get_runbook(data["name"])
             steps = len(getattr(rb_cls, "steps", []) or [])
+            label = data.get("label") or data["name"]
             body.update(
-                f"[b green]{data['name']}[/]  [dim](runbook — {steps} checks)[/]\n\n"
+                f"[b green]📋 {label}[/]  [dim](runbook — {steps} checks)[/]\n"
+                f"[dim]· {data['name']}[/]\n\n"
                 f"{data.get('desc') or '—'}\n\n"
                 f"[green]▶ Enter to run the whole sweep — re-reads the live "
                 f"system, writes a sealed evidence bundle.[/]"
@@ -579,8 +589,10 @@ class ExodiaTUI(App[None]):
         elif kind == "action":
             act_cls = registry.get_action(data["name"])
             reqs = ", ".join(getattr(act_cls, "requires_checks", []) or []) or "—"
+            label = data.get("label") or data["name"]
             body.update(
-                f"[b magenta]{data['name']}[/]  [dim](state-changing action)[/]\n\n"
+                f"[b magenta]⚙️ {label}[/]  [dim](state-changing action)[/]\n"
+                f"[dim]· {data['name']}[/]\n\n"
                 f"{data.get('desc') or '—'}\n\n"
                 f"requires checks: {reqs}\n"
                 f"[yellow]⚠ Actions are guarded and NOT run from the TUI. "

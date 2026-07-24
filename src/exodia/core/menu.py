@@ -142,6 +142,25 @@ class Operation:
     description: str
     methodology: str
     phase: str = "unclassified"  # lifecycle phase key (Phase enum value)
+    #: human-readable label for the operation (SAP-transaction-first when known).
+    #: Falls back to a title-cased leaf of the dotted name when the class did not
+    #: declare a ``title`` — so the UI never has to show a raw machine name.
+    title: str = ""
+
+    @property
+    def label(self) -> str:
+        """The best human label: the declared title, else a prettified name."""
+        return self.title or op_label(self.name)
+
+
+def op_label(name: str) -> str:
+    """Turn a dotted machine name into a readable label as a last resort.
+
+    ``hsr.log-mode-normal`` -> ``Log Mode Normal``. Used only when a check/action
+    class did not declare an explicit ``title``.
+    """
+    leaf = name.rsplit(".", 1)[-1]
+    return leaf.replace("-", " ").replace("_", " ").title()
 
 
 def discover_operations(registry: Registry) -> list[Operation]:
@@ -152,6 +171,7 @@ def discover_operations(registry: Registry) -> list[Operation]:
             Operation(
                 name, "check", check_cls.description, _methodology(name),
                 _phase_of(check_cls, name, "check"),
+                getattr(check_cls, "title", "") or "",
             )
         )
     for name, action_cls in registry.actions().items():
@@ -159,6 +179,7 @@ def discover_operations(registry: Registry) -> list[Operation]:
             Operation(
                 name, "action", action_cls.description, _methodology(name),
                 _phase_of(action_cls, name, "action"),
+                getattr(action_cls, "title", "") or "",
             )
         )
     return sorted(ops, key=lambda o: (o.methodology, o.kind != "check", o.name))

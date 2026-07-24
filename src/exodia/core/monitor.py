@@ -307,15 +307,20 @@ class RichMonitor:
         if self._results:
             table = Table(show_header=True, header_style="bold", expand=True)
             table.add_column("status", width=8)
-            table.add_column("name")
+            table.add_column("check")
             table.add_column("duration", width=10, justify="right")
             table.add_column("summary", overflow="fold")
             for r in self._results:
                 glyph = self._status_glyph(r.status)
                 style = "" if self._no_color else _STATUS_STYLE.get(r.status, "")
+                if r.display_title != r.name:
+                    name_cell = Text(r.display_title)
+                    name_cell.append(f"\n{r.name}", style="dim")
+                else:
+                    name_cell = Text(r.name)
                 table.add_row(
                     Text(f"{glyph} {r.status.value}", style=style),
-                    r.name,
+                    name_cell,
                     Text(r.duration_str, style="dim"),
                     r.summary,
                 )

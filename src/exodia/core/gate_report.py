@@ -160,7 +160,9 @@ class ExceptionReport:
             for r in advisories:
                 at.add_row(
                     _sev_glyph(Severity.ADVISORY, no_emoji),
-                    r.name,
+                    f"{r.display_title}\n[dim]{r.name}[/]"
+                    if r.display_title != r.name
+                    else r.name,
                     r.phase.label,
                     r.side.label if r.side else "—",
                     r.responsible or "—",
@@ -236,8 +238,13 @@ class ExceptionReport:
             for r in advisories:
                 side = r.side.label if r.side else "—"
                 owner = r.responsible or "—"
+                check = (
+                    f"{r.display_title} (`{r.name}`)"
+                    if r.display_title != r.name
+                    else f"`{r.name}`"
+                )
                 lines.append(
-                    f"| {Severity.ADVISORY.icon} | `{r.name}` | {r.phase.label} | "
+                    f"| {Severity.ADVISORY.icon} | {check} | {r.phase.label} | "
                     f"{side} | {owner} | {r.summary} |"
                 )
         else:
