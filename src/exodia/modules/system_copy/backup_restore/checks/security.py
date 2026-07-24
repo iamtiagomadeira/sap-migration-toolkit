@@ -16,6 +16,7 @@ class EncryptionKeysCheck(Check):
 
     name = "backup-restore.hana.encryption-keys"
     description = "Encryption root keys available for an encrypted backup."
+    title = "Backup Encryption Root Keys Available"
     blocking = True
 
     def run(self, ctx: Context) -> Result:
@@ -62,6 +63,7 @@ class SidadmPermissionsCheck(Check):
 
     name = "backup-restore.hana.sidadm-permissions"
     description = "sidadm has read access to the backup paths."
+    title = "sidadm Read Access to Backup Paths"
     blocking = True
 
     def run(self, ctx: Context) -> Result:

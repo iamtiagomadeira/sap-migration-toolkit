@@ -23,6 +23,7 @@ class JvmKernelCompatCheck(Check):
 
     name = "pipo.jvm-kernel-compat"
     description = "SAP kernel + SAP JVM versions compatible (target >= source)."
+    title = "SAP Kernel + SAP JVM Compatibility (target ≥ source)"
     blocking = True
 
     def run(self, ctx: Context) -> Result:

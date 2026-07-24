@@ -20,6 +20,7 @@ class MiniChecksCheck(Check):
 
     name = "backup-restore.hana.minichecks"
     description = "Run HANA_Configuration_MiniChecks and flag critical rows (SAP Note 1969700)."
+    title = "HANA_Configuration_MiniChecks (SAP Note 1969700)"
     blocking = False
 
     def run(self, ctx: Context) -> Result:

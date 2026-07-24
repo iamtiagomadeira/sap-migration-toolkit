@@ -80,6 +80,7 @@ class PcaTaskListAvailableCheck(Check):
 
     name = "solution-manager.pca-tasklist-available"
     description = "Post-Copy Automation task lists are available."
+    title = "STC01 — Post-Copy Automation Task Lists Available"
     blocking = False
 
     def parameters(self) -> list[ParamSpec]:
@@ -111,6 +112,7 @@ class SldReachableCheck(Check):
 
     name = "solution-manager.sld-reachable"
     description = "SLD is reachable for data-supplier re-registration."
+    title = "SLD Reachable (data-supplier re-registration)"
     blocking = False
 
     def parameters(self) -> list[ParamSpec]:
@@ -141,6 +143,7 @@ class LmdbReachableCheck(Check):
 
     name = "solution-manager.lmdb-reachable"
     description = "LMDB host is reachable for landscape reconciliation."
+    title = "LMDB Reachable (landscape reconciliation)"
     blocking = False
 
     def parameters(self) -> list[ParamSpec]:
@@ -174,6 +177,7 @@ class NoStaleSourceRegistrationCheck(Check):
 
     name = "solution-manager.no-stale-source-registration"
     description = "Reminder: purge the source's stale SLD/LMDB registration."
+    title = "Purge Stale Source SLD/LMDB Registration"
     blocking = False
 
     def parameters(self) -> list[ParamSpec]:
@@ -204,6 +208,7 @@ class ManagedSystemConnectivityCheck(Check):
 
     name = "solution-manager.managed-system-connectivity"
     description = "Managed system reachable via SAP gateway (33<nn>) after copy."
+    title = "Managed System Reachable via SAP Gateway (33<nn>)"
     blocking = False
 
     def parameters(self) -> list[ParamSpec]:

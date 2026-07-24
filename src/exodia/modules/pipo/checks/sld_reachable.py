@@ -19,6 +19,7 @@ class SLDReachableCheck(Check):
 
     name = "pipo.sld-reachable"
     description = "SLD endpoint reachable (HTTP status) for data-supplier registration."
+    title = "SLD Endpoint Reachable (data-supplier registration)"
     blocking = False
 
     def run(self, ctx: Context) -> Result:

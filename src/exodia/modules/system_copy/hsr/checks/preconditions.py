@@ -83,6 +83,7 @@ class VersionCompatibilityCheck(Check):
 
     name = "hsr.version-compatibility"
     description = "Secondary HANA revision is compatible with the primary."
+    title = "HSR — Secondary Revision Compatibility"
     blocking = True
 
     def parameters(self) -> list[ParamSpec]:
@@ -122,6 +123,7 @@ class LogModeNormalCheck(Check):
 
     name = "hsr.log-mode-normal"
     description = "Primary runs in log_mode=normal (required for HSR)."
+    title = "HSR — Primary log_mode=normal"
     blocking = True
 
     def parameters(self) -> list[ParamSpec]:
@@ -156,6 +158,7 @@ class ReplicationPortsReachableCheck(Check):
 
     name = "hsr.replication-ports-reachable"
     description = "Secondary can reach the primary replication ports."
+    title = "HSR — Replication Ports Reachable (4<nn>01-07)"
     blocking = False
 
     def parameters(self) -> list[ParamSpec]:
@@ -190,6 +193,7 @@ class DistinctHostsCheck(Check):
 
     name = "hsr.distinct-hosts"
     description = "Primary and secondary are different hosts."
+    title = "HSR — Distinct Primary/Secondary Hosts"
     blocking = True
 
     def parameters(self) -> list[ParamSpec]:
@@ -228,6 +232,7 @@ class ReplicationStatusCheck(Check):
 
     name = "hsr.replication-status"
     description = "System replication overall status is ACTIVE (caught up)."
+    title = "HSR — Replication Status ACTIVE (hdbnsutil -sr_state)"
     blocking = True
 
     def parameters(self) -> list[ParamSpec]:
@@ -287,6 +292,7 @@ class DataBackupExistsCheck(Check):
 
     name = "hsr.data-backup-exists"
     description = "Primary has a full data backup (required to enable HSR)."
+    title = "HSR — Primary Full Data Backup Exists"
     blocking = True
 
     def parameters(self) -> list[ParamSpec]:

@@ -19,6 +19,7 @@ class IcmPortsCheck(Check):
 
     name = "pipo.icm-ports"
     description = "ICM HTTP/HTTPS ports (5NN00/5NN01) available on the target host."
+    title = "ICM HTTP/HTTPS Ports Available (5<nn>00/5<nn>01)"
     blocking = True
 
     def run(self, ctx: Context) -> Result:

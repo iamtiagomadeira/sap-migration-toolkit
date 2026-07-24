@@ -21,6 +21,7 @@ class HanaJavaSchemaCheck(Check):
 
     name = "pipo.hana-java-schema"
     description = "HANA Java schema SAP<SID>DB present and accessible via hdbsql."
+    title = "hdbsql — HANA Java Schema SAP<SID>DB Present"
     blocking = True
 
     def run(self, ctx: Context) -> Result:

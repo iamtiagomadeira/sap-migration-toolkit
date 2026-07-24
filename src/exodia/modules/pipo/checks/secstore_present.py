@@ -28,6 +28,7 @@ class SecStorePresentCheck(Check):
 
     name = "pipo.secstore-present"
     description = "SECSTORE files present and readable (key phrase never logged)."
+    title = "SECSTORE Files Present & Readable"
     blocking = True
 
     def run(self, ctx: Context) -> Result:

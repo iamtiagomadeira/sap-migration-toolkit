@@ -25,6 +25,7 @@ class LogModeNormalCheck(Check):
 
     name = "backup-restore.hana.log-mode-normal"
     description = "log_mode=normal in global.ini [persistence]."
+    title = "HANA log_mode — normal (global.ini persistence)"
     blocking = True
 
     def run(self, ctx: Context) -> Result:
@@ -55,6 +56,7 @@ class VersionCompatibilityCheck(Check):
 
     name = "backup-restore.hana.version-compatibility"
     description = "Target HANA revision >= source revision."
+    title = "HANA Revision Compatibility (target ≥ source)"
     blocking = True
 
     def run(self, ctx: Context) -> Result:
@@ -92,6 +94,7 @@ class BackintConfigCheck(Check):
 
     name = "backup-restore.hana.backint-config"
     description = "Backint configuration present when backint is used."
+    title = "Backint Backup Configuration Present"
     blocking = False
 
     def run(self, ctx: Context) -> Result:

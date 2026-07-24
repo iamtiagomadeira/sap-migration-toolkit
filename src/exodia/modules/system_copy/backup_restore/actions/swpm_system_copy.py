@@ -45,6 +45,7 @@ class SwpmSystemCopyAction(Action):
 
     name = "backup-restore.swpm.system-copy"
     description = "Orchestrate SWPM sapinst headless (observer-mode GUI handoff)."
+    title = "SWPM — Headless System Copy (observer-mode handoff)"
     destructive = True
     requires_checks: list[str] = []
 

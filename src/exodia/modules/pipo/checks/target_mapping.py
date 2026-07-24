@@ -19,6 +19,7 @@ class TargetMappingCheck(Check):
 
     name = "pipo.target-mapping"
     description = "Target host + instance number match the expected system-copy mapping."
+    title = "Target Host/Instance Mapping Match"
     blocking = True
 
     def run(self, ctx: Context) -> Result:

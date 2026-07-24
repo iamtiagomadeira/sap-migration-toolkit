@@ -23,6 +23,7 @@ class RestoreDatabaseAction(Action):
 
     name = "backup-restore.restore-database"
     description = "Restore a database from data + log backups (driver: hana|ase)."
+    title = "Restore Database from Backup (HANA/ASE driver)"
     destructive = True
     requires_checks = [
         "backup-restore.hana.target-data-space",

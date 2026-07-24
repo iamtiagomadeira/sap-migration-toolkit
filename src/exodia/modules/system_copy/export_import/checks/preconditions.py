@@ -94,6 +94,7 @@ class SwpmPresentCheck(Check):
 
     name = "export-import.swpm-present"
     description = "SWPM (sapinst) is available to drive the export/import."
+    title = "SWPM (sapinst) Available for Export/Import"
     blocking = True
 
     def parameters(self) -> list[ParamSpec]:
@@ -121,6 +122,7 @@ class LoadToolForStackCheck(Check):
 
     name = "export-import.load-tool-for-stack"
     description = "R3load (ABAP) / JLoad (Java) available for the chosen stack."
+    title = "R3load/JLoad Available for Stack"
     blocking = True
 
     def parameters(self) -> list[ParamSpec]:
@@ -178,6 +180,7 @@ class ExportDirSpaceCheck(Check):
 
     name = "export-import.export-dir-space"
     description = "Export directory has enough free space for the dump."
+    title = "Export Directory Free Space for Dump"
     blocking = False
 
     def parameters(self) -> list[ParamSpec]:
@@ -226,6 +229,7 @@ class DbClientReachableCheck(Check):
 
     name = "export-import.db-client-reachable"
     description = "Database client available for the target import."
+    title = "Target DB Client Available for Import"
     blocking = False
 
     def parameters(self) -> list[ParamSpec]:
@@ -281,6 +285,7 @@ class ExportConsistencyCheck(Check):
 
     name = "export-import.export-consistency"
     description = "Finished source export looks complete (labels + keydb.xml)."
+    title = "Source Export Consistency (labels + keydb.xml)"
     blocking = True
 
     def parameters(self) -> list[ParamSpec]:

@@ -14,6 +14,7 @@ class FreeSpaceCheck(Check):
 
     name = "core.free-space"
     description = "Filesystem free space >= threshold (df-based)."
+    title = "Filesystem Free Space (df)"
     blocking = True
 
     def run(self, ctx: Context) -> Result:

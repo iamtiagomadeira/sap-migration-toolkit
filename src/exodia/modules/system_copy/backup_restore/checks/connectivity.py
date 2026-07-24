@@ -17,6 +17,7 @@ class SidInstanceSanityCheck(Check):
 
     name = "backup-restore.hana.sid-instance-sanity"
     description = "SID and instance number are well-formed."
+    title = "SID & Instance Number Well-Formed"
     blocking = True
 
     def run(self, ctx: Context) -> Result:
@@ -47,6 +48,7 @@ class UserstoreKeyCheck(Check):
 
     name = "backup-restore.hana.userstore-key"
     description = "hdbuserstore key present and usable."
+    title = "hdbuserstore Key Present & Usable"
     blocking = True
 
     def run(self, ctx: Context) -> Result:
@@ -76,6 +78,7 @@ class HanaPortsCheck(Check):
 
     name = "backup-restore.hana.ports-available"
     description = "HANA SQL ports (3<nn>13 / 3<nn>15) reachable."
+    title = "HANA SQL Ports Reachable (3<nn>13/3<nn>15)"
     blocking = False
 
     def run(self, ctx: Context) -> Result:

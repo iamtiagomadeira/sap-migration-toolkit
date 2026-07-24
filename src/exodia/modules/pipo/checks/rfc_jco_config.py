@@ -31,6 +31,7 @@ class RfcJcoConfigCheck(Check):
 
     name = "pipo.rfc-jco-config"
     description = "List RFC/JCo destinations for post-copy re-pointing review (read-only)."
+    title = "RFC/JCo Destinations Inventory (post-copy review)"
     blocking = False
 
     def run(self, ctx: Context) -> Result:

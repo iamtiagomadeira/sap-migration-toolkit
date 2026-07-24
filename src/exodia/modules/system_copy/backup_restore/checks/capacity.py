@@ -16,6 +16,7 @@ class TargetDataSpaceCheck(Check):
 
     name = "backup-restore.hana.target-data-space"
     description = "Target free space >= source data size (df-based)."
+    title = "Target Data Volume Free Space (df)"
     blocking = True
 
     def run(self, ctx: Context) -> Result:
@@ -55,6 +56,7 @@ class TargetLogSpaceCheck(Check):
 
     name = "backup-restore.hana.target-log-space"
     description = "Target log/trace volume free space >= threshold."
+    title = "Target Log/Trace Volume Free Space (df)"
     blocking = True
 
     def run(self, ctx: Context) -> Result:

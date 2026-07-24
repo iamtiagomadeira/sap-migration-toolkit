@@ -23,6 +23,7 @@ class ASJavaUpCheck(Check):
 
     name = "pipo.as-java-up"
     description = "AS Java instance is up (sapcontrol GetProcessList all GREEN)."
+    title = "sapcontrol — AS Java Up (GetProcessList GREEN)"
     blocking = True
 
     def run(self, ctx: Context) -> Result:

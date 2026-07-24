@@ -21,6 +21,7 @@ class DataBackupPresentCheck(Check):
 
     name = "backup-restore.hana.data-backup-present"
     description = "A successful HANA data backup exists and is readable."
+    title = "HANA Data Backup Present & Readable"
     blocking = True
 
     def run(self, ctx: Context) -> Result:
@@ -62,6 +63,7 @@ class LogBackupsContinuousCheck(Check):
 
     name = "backup-restore.hana.log-backups-continuous"
     description = "Log backups are present and continuous (no gaps)."
+    title = "Log Backups Present & Continuous"
     blocking = True
 
     def run(self, ctx: Context) -> Result:
@@ -109,6 +111,7 @@ class BackupCatalogIntegrityCheck(Check):
 
     name = "backup-restore.hana.catalog-integrity"
     description = "Backup catalog is intact (hdbbackupdiag / backup.log)."
+    title = "Backup Catalog Integrity (hdbbackupdiag)"
     blocking = True
 
     def run(self, ctx: Context) -> Result:

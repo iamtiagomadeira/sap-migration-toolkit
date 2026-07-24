@@ -106,6 +106,7 @@ class RebuildSecStoreAction(_PostCopyAction):
 
     name = "pipo.rebuild-secstore"
     description = "Re-key AS Java secure store on target (key phrase via stdin, never logged)."
+    title = "SECSTORE — Re-key AS Java Secure Store"
     requires_checks = ["pipo.secstore-present", "pipo.as-java-up"]
     rollback_hint = (
         "restore the previous SecStore.properties + SecStore.key pair from the "
@@ -206,6 +207,7 @@ class RegisterSldAction(_PostCopyAction):
 
     name = "pipo.register-sld"
     description = "Re-point SLD data supplier to the target SLD host/port (sldreg)."
+    title = "sldreg — Re-point SLD Data Supplier to Target"
     requires_checks = ["pipo.sld-reachable", "pipo.as-java-up"]
     rollback_hint = (
         "restore the previous SLD data-supplier configuration (host/port) from "
@@ -299,6 +301,7 @@ class FixRfcJcoAction(_PostCopyAction):
 
     name = "pipo.fix-rfc-jco"
     description = "Re-point JCo/RFC destinations to the target ABAP/back-end hosts."
+    title = "Re-point JCo/RFC Destinations to Target"
     requires_checks = ["pipo.rfc-jco-config", "pipo.as-java-up"]
     rollback_hint = (
         "restore the pre-change JCo destination configuration export and re-apply "
@@ -391,6 +394,7 @@ class ReconfigureUmeAction(_PostCopyAction):
 
     name = "pipo.reconfigure-ume"
     description = "Re-point the UME datasource/connection to the target HANA schema."
+    title = "UME — Re-point Datasource to Target HANA Schema"
     requires_checks = ["pipo.as-java-up", "pipo.hana-java-schema"]
     rollback_hint = (
         "restore the previous ume.persistence.data_source_configuration value "
@@ -485,6 +489,7 @@ class PostCopyAllAction(_PostCopyAction):
 
     name = "pipo.postcopy-all"
     description = "Run all Java post-copy steps in order (SECSTORE -> SLD -> RFC/JCo -> UME)."
+    title = "Run All Java Post-Copy Steps (SECSTORE→SLD→RFC/JCo→UME)"
     rollback_hint = "roll back each completed sub-action individually per its runbook"
 
     #: the ordered sub-actions
